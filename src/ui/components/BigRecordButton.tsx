@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import type { RecordingPhase } from "../hooks/useRecording";
 
 function formatElapsed(ms: number): string {
@@ -29,23 +30,46 @@ export function BigRecordButton({
   if (phase === "saved") label = "Saved";
   if (phase === "error") label = "Try again";
 
-  let longPressTimer: ReturnType<typeof setTimeout> | null = null;
+  // Plain `let`s here get reset every render, and this button re-renders
+  // every 200ms while recording (elapsedMs ticking) — a timer id stored in
+  // a render-local variable can be orphaned by the next render before
+  // pointerup ever reads it back. useRef survives across renders instead.
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The browser fires a synthesized `click` after pointerup even when a
+  // long-press just cancelled the recording — by then `recording` has
+  // already flipped back to false, so an unguarded onClick reads that as
+  // "idle, start a new recording" and immediately starts one. This flag
+  // tells the next click to no-op instead.
+  const suppressNextClickRef = useRef(false);
+
+  const clearLongPressTimer = () => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  };
 
   return (
     <button
       className={`big-record-button ${recording ? "recording" : ""}`}
       disabled={busy}
-      onClick={() => (recording ? onStop() : onStart())}
+      onClick={() => {
+        if (suppressNextClickRef.current) {
+          suppressNextClickRef.current = false;
+          return;
+        }
+        recording ? onStop() : onStart();
+      }}
       onPointerDown={() => {
         if (!recording) return;
-        longPressTimer = setTimeout(onCancel, 2000); // long-press to cancel, §9.1
+        longPressTimerRef.current = setTimeout(() => {
+          longPressTimerRef.current = null;
+          suppressNextClickRef.current = true;
+          onCancel();
+        }, 2000); // long-press to cancel, §9.1
       }}
-      onPointerUp={() => {
-        if (longPressTimer) clearTimeout(longPressTimer);
-      }}
-      onPointerLeave={() => {
-        if (longPressTimer) clearTimeout(longPressTimer);
-      }}
+      onPointerUp={clearLongPressTimer}
+      onPointerLeave={clearLongPressTimer}
       aria-label={recording ? "Stop recording" : "Start recording"}
     >
       <span className="dot" />

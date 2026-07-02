@@ -6,18 +6,29 @@ import { SyncJobSchema, type SyncJob } from "../sync/types";
 /**
  * The local-only persistence layer (dev guide §4.1: "IndexedDB via
  * idb-keyval — queue for audio, entries, sync jobs"). Everything the app
- * shows or acts on before a sync round-trip lives here. Four stores, one
- * database, kept deliberately flat (id -> value) rather than indexed —
- * query-engine.ts does its filtering in memory after `allEntries()`, which
- * is well within the <100ms/1000-entries budget and avoids IndexedDB cursor
- * complexity for a Phase 1 MVP.
+ * shows or acts on before a sync round-trip lives here. Kept deliberately
+ * flat (id -> value) rather than indexed — query-engine.ts does its
+ * filtering in memory after `allEntries()`, which is well within the
+ * <100ms/1000-entries budget and avoids IndexedDB cursor complexity for a
+ * Phase 1 MVP.
+ *
+ * Each store gets its OWN database rather than sharing one "deckboss" db
+ * with four object stores. idb-keyval's createStore(dbName, storeName)
+ * calls `indexedDB.open(dbName)` with no explicit version; when multiple
+ * createStore calls share a dbName, only the first request's upgradeneeded
+ * actually fires and creates its object store — the other three stores
+ * never get created, and every read/write against them throws "One of the
+ * specified object stores was not found." (confirmed in production: this
+ * broke entry persistence and the config read, which cascaded into the
+ * Timeline screen hanging on "Loading…" forever and a false "Sync failed"
+ * banner on first load). One database per store sidesteps the shared-open
+ * race entirely.
  */
 
-const DB_NAME = "deckboss";
-const entryStore: UseStore = createStore(DB_NAME, "entries");
-const audioStore: UseStore = createStore(DB_NAME, "audio");
-const metaStore: UseStore = createStore(DB_NAME, "meta");
-const syncQueueStore: UseStore = createStore(DB_NAME, "sync-queue");
+const entryStore: UseStore = createStore("deckboss-entries", "entries");
+const audioStore: UseStore = createStore("deckboss-audio", "audio");
+const metaStore: UseStore = createStore("deckboss-meta", "meta");
+const syncQueueStore: UseStore = createStore("deckboss-sync-queue", "sync-queue");
 
 const CONFIG_KEY = "app-config";
 

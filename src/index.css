@@ -6,6 +6,13 @@
   --text-muted: rgba(245, 247, 250, 0.6);
   --accent: #ff4444;
   --accent-dim: rgba(255, 68, 68, 0.25);
+  /* Slightly brighter than --accent — used only where the color is text
+     sitting directly on a dark background (nav label, error banner). At
+     #ff4444 those two measured at 4.63:1 / 4.77:1, barely clearing WCAG AA
+     with no margin; this is meant to be readable in sunlight glare, so it
+     needs real headroom, not a bare pass. --accent itself stays as-is for
+     solid fills/dots where this isn't a concern. */
+  --accent-text: #ff6b6b;
   --ok: #3ddc84;
   --warn: #ffb84d;
 
@@ -45,6 +52,9 @@ textarea {
   border: 1px solid var(--card-border);
   border-radius: 8px;
   padding: 10px 12px;
+  /* Measured at 39px without this — below the 44px touch-target minimum,
+     tight for a gloved hand. */
+  min-height: 44px;
 }
 
 .app-shell {
@@ -104,7 +114,7 @@ textarea {
   min-height: 44px;
 }
 .bottom-nav a.active {
-  color: var(--accent);
+  color: var(--accent-text);
 }
 
 /* Record screen */
@@ -119,8 +129,13 @@ textarea {
 }
 
 .big-record-button {
-  width: 220px;
-  height: 220px;
+  /* Was a fixed 220x220px — measured at 21% of screen area on a small
+     phone but only 6% on a tablet, the opposite of "dominant." vmin scales
+     with whichever viewport dimension is smaller, so this stays a similar
+     proportion of the screen across phone and tablet instead of just
+     phone. */
+  width: clamp(200px, 55vmin, 340px);
+  height: clamp(200px, 55vmin, 340px);
   border-radius: 50%;
   border: none;
   background: var(--accent-dim);
@@ -137,8 +152,8 @@ textarea {
   min-height: 80px;
 }
 .big-record-button .dot {
-  width: 64px;
-  height: 64px;
+  width: 30%;
+  height: 30%;
   border-radius: 50%;
   background: var(--accent);
 }
@@ -312,7 +327,7 @@ textarea {
 }
 .offline-banner.error {
   background: rgba(255, 68, 68, 0.15);
-  color: var(--accent);
+  color: var(--accent-text);
 }
 .offline-banner.syncing {
   background: rgba(109, 180, 255, 0.15);

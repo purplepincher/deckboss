@@ -112,24 +112,39 @@ export function useRecording() {
       }
     }
 
-    const entry = await buildEntry({
-      audioBlob: blob,
-      gps: gpsRef.current,
-      transcript,
-      source: "voice",
-    });
+    try {
+      const entry = await buildEntry({
+        audioBlob: blob,
+        gps: gpsRef.current,
+        transcript,
+        source: "voice",
+      });
 
-    if (entry.audio) {
-      await putAudioBlob(entry.id, blob);
-      await enqueueAudioForSync(entry.id, blob);
+      // Save the entry itself first — the transcript is the note the
+      // fisherman actually cares about. Audio blob storage is best-effort
+      // and must never be able to make the note itself disappear if it
+      // fails (a real production bug: putAudioBlob throwing here used to
+      // abort this whole function before saveEntry() ran, silently
+      // dropping the entry).
+      await saveEntry(entry);
+      await enqueueEntryForSync(entry.id);
+
+      if (entry.audio) {
+        try {
+          await putAudioBlob(entry.id, blob);
+          await enqueueAudioForSync(entry.id, blob);
+        } catch (err) {
+          console.error("Failed to store audio for entry", entry.id, err);
+        }
+      }
+
+      setElapsedMs(0);
+      setPhase("saved");
+      setTimeout(() => setPhase("idle"), 1500);
+    } catch (err) {
+      setPhase("error");
+      setError(err instanceof Error ? err.message : "Could not save the recording.");
     }
-
-    await saveEntry(entry);
-    await enqueueEntryForSync(entry.id);
-
-    setElapsedMs(0);
-    setPhase("saved");
-    setTimeout(() => setPhase("idle"), 1500);
   }, [config, saveEntry]);
 
   const cancel = useCallback(() => {
