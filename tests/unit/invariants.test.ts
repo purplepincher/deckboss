@@ -72,6 +72,36 @@ describe("assertWriteIsAdditive", () => {
     expect(() => assertWriteIsAdditive(previous, next)).toThrow(InvariantViolationError);
   });
 
+  it("rejects changing transcript directly (must use a correction)", () => {
+    const previous = baseEntry();
+    previous.transcript = { text: "original", confidence: 0.9, language: "en", engine: "webspeech" };
+    const next = {
+      ...previous,
+      transcript: { text: "mutated", confidence: 0.9, language: "en", engine: "webspeech" },
+    };
+    expect(() => assertWriteIsAdditive(previous, next)).toThrow(InvariantViolationError);
+  });
+
+  it("rejects changing entities directly (must use a correction)", () => {
+    const previous = baseEntry();
+    previous.entities = [{ type: "gear", value: "crab pots", confidence: 0.9 }];
+    const next = {
+      ...previous,
+      entities: [{ type: "species", value: "lobster", confidence: 0.9 }],
+    };
+    expect(() => assertWriteIsAdditive(previous, next)).toThrow(InvariantViolationError);
+  });
+
+  it("rejects changing tags directly (must use a correction)", () => {
+    const previous = baseEntry();
+    previous.tags = ["original"];
+    const next = {
+      ...previous,
+      tags: ["mutated"],
+    };
+    expect(() => assertWriteIsAdditive(previous, next)).toThrow(InvariantViolationError);
+  });
+
   it("allows re-writing an entry with corrections unchanged (idempotent write)", () => {
     const c1 = buildAmendCorrection({ tags: ["x"] });
     const previous = { ...baseEntry(), corrections: [c1] };
