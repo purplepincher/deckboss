@@ -46,6 +46,7 @@ export const GoogleDriveConfigSchema = z.object({
   accessToken: z.string().nullable(), // short-lived, memory-preferred; persisted here only for PWA reload continuity
   refreshToken: z.string().nullable(),
   folderId: z.string().nullable(),
+  tokenExpiresAt: z.number().int().nullable(), // epoch ms; absent/null means "no persisted token"
 });
 export type GoogleDriveConfig = z.infer<typeof GoogleDriveConfigSchema>;
 

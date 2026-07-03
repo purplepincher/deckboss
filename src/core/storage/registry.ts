@@ -39,6 +39,7 @@ function cacheKey(config: AppConfig): string {
   // invalidate a live, authenticated storage connection).
   return JSON.stringify({
     backend: config.storage.activeBackend,
+    googleDrive: config.storage.googleDrive,
     r2: config.storage.cloudflareR2,
     oracle: config.storage.oracleOci,
   });
@@ -68,7 +69,12 @@ async function construct(config: AppConfig): Promise<StorageAdapter | null> {
     case "google-drive": {
       const { GoogleDriveAdapter } = await import("./adapters/google-drive");
       const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined;
-      return new GoogleDriveAdapter(clientId ?? "");
+      const gd = config.storage.googleDrive;
+      const existingToken =
+        gd?.accessToken && typeof gd.tokenExpiresAt === "number"
+          ? { accessToken: gd.accessToken, tokenExpiresAt: gd.tokenExpiresAt }
+          : null;
+      return new GoogleDriveAdapter(clientId ?? "", existingToken);
     }
 
     case "cloudflare-r2": {

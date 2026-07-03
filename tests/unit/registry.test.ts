@@ -1,8 +1,27 @@
 import { describe, it, expect } from "vitest";
-import { buildAdapter } from "../../src/core/storage/registry";
+import { buildAdapter, clearAdapterCache } from "../../src/core/storage/registry";
 import { defaultAppConfig } from "../../src/config/schema";
 
 describe("buildAdapter caching", () => {
+  it("injects a persisted Google Drive token so a fresh adapter starts authenticated", async () => {
+    clearAdapterCache();
+    const config = {
+      ...defaultAppConfig(),
+      storage: {
+        activeBackend: "google-drive" as const,
+        googleDrive: {
+          connected: true,
+          accessToken: "fake-access-token",
+          tokenExpiresAt: Date.now() + 3_600_000,
+          refreshToken: null,
+          folderId: null,
+        },
+      },
+    };
+    const adapter = await buildAdapter(config);
+    expect(adapter).not.toBeNull();
+    expect(await adapter!.isAuthenticated()).toBe(true);
+  });
   it("returns the same adapter instance across calls with unchanged config", async () => {
     const config = { ...defaultAppConfig(), storage: { activeBackend: "local-zip" as const } };
     const a = await buildAdapter(config);
