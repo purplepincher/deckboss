@@ -8,7 +8,7 @@ import type { Entity } from "../core/types/log-entry";
  * real NLP in Phase 3; this module's job is just to not block on that.
  */
 
-const SPECIES = [
+export const SPECIES = [
   "chinook",
   "coho",
   "pink salmon",
@@ -30,7 +30,7 @@ const SPECIES = [
   "herring",
 ];
 
-const GEAR = [
+export const GEAR = [
   "crab pots?",
   "crab traps?",
   "gillnet",
@@ -61,7 +61,7 @@ const LOCATION_RELATIVE = [
   "rail",
 ];
 
-const WEATHER = ["wind", "swell", "fog", "rain", "chop", "chopp?y", "calm", "glassy", "squall"];
+export const WEATHER = ["wind", "swell", "fog", "rain", "chop", "chopp?y", "calm", "glassy", "squall"];
 
 const NUMBER_WORDS: Record<string, number> = {
   one: 1,
@@ -103,7 +103,7 @@ const MEASUREMENT_RE = new RegExp(
 );
 const STANDALONE_QUANTITY_RE = new RegExp(`\\b(${NUMBER_TOKEN})\\b`, "gi");
 
-function keywordRegex(words: string[]): RegExp {
+export function keywordRegex(words: string[]): RegExp {
   return new RegExp(`\\b(${words.join("|")})\\b`, "gi");
 }
 
