@@ -1,4 +1,5 @@
 import "fake-indexeddb/auto";
+import "@testing-library/jest-dom/vitest";
 import { Blob as NodeBlob } from "node:buffer";
 
 // jsdom's own Blob class isn't recognized by Node's global structuredClone()
