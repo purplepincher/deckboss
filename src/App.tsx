@@ -1,13 +1,22 @@
-import { useEffect, useState } from "react";
+import { Suspense, lazy, useEffect, useState } from "react";
 import { HashRouter, Routes, Route, NavLink } from "react-router-dom";
 import { useDeckBossStore } from "./state/store";
 import { verifyStoreIntegrity } from "./core/storage/local-db";
 import { requestPersistentStorage } from "./core/storage/persistence";
 import { OfflineBanner } from "./ui/screens/OfflineBanner";
 import { RecordScreen } from "./ui/screens/RecordScreen";
-import { TimelineScreen } from "./ui/screens/TimelineScreen";
-import { EntryDetailScreen } from "./ui/screens/EntryDetailScreen";
-import { SettingsScreen } from "./ui/screens/SettingsScreen";
+
+// RecordScreen is the landing route and stays eager — it's the one screen
+// that has to be interactive immediately. Everything reached by tapping a
+// nav link can afford a code-split boundary; a Lighthouse audit found 65%
+// of the main bundle going unused on a typical load, and Settings alone
+// pulls in @aws-sdk/client-s3 transitively (via the R2/Oracle adapters)
+// even though most sessions never open Settings at all.
+const TimelineScreen = lazy(() => import("./ui/screens/TimelineScreen").then((m) => ({ default: m.TimelineScreen })));
+const EntryDetailScreen = lazy(() =>
+  import("./ui/screens/EntryDetailScreen").then((m) => ({ default: m.EntryDetailScreen })),
+);
+const SettingsScreen = lazy(() => import("./ui/screens/SettingsScreen").then((m) => ({ default: m.SettingsScreen })));
 
 type BootState = { status: "checking" } | { status: "ok" } | { status: "failed"; stores: string[] };
 
@@ -76,12 +85,14 @@ function AppShell() {
       <div className="app-shell">
         <OfflineBanner />
         <div className="screen" style={{ padding: 0 }}>
-          <Routes>
-            <Route path="/" element={<RecordScreen />} />
-            <Route path="/timeline" element={<div className="screen"><TimelineScreen /></div>} />
-            <Route path="/entry/:id" element={<EntryDetailScreen />} />
-            <Route path="/settings" element={<SettingsScreen />} />
-          </Routes>
+          <Suspense fallback={null}>
+            <Routes>
+              <Route path="/" element={<RecordScreen />} />
+              <Route path="/timeline" element={<div className="screen"><TimelineScreen /></div>} />
+              <Route path="/entry/:id" element={<EntryDetailScreen />} />
+              <Route path="/settings" element={<SettingsScreen />} />
+            </Routes>
+          </Suspense>
         </div>
         <nav className="bottom-nav">
           <NavLink to="/" end className={({ isActive }) => (isActive ? "active" : "")}>

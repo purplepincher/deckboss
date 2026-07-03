@@ -146,7 +146,7 @@ async function refreshManifest(): Promise<void> {
 
 async function getActiveAdapter(): Promise<StorageAdapter | null> {
   const config = await getConfig();
-  const adapter = buildAdapter(config);
+  const adapter = await buildAdapter(config);
   if (!adapter) return null;
   if (!(await adapter.isAuthenticated())) return null;
   return adapter;

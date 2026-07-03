@@ -15,6 +15,12 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: "autoUpdate",
+      // A Lighthouse audit found registerSW.js costing ~1s of main-thread
+      // blocking time on throttled mobile CPU — competing directly with
+      // the record button becoming tappable in the first second, which is
+      // the one interaction this app can't afford to feel broken. `defer`
+      // lets HTML parsing and the app's own script finish first.
+      injectRegister: "script-defer",
       includeAssets: ["icons/icon-192x192.png", "icons/icon-512x512.png"],
       manifest: {
         name: "DeckBoss",

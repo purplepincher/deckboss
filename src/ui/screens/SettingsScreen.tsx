@@ -54,7 +54,7 @@ export function SettingsScreen() {
     try {
       if (id === "google-drive") {
         const next = { ...config, storage: { ...config.storage, activeBackend: id } };
-        const adapter = buildAdapter(next);
+        const adapter = await buildAdapter(next);
         await adapter?.authenticate();
         await saveConfig(next);
       } else {
@@ -79,7 +79,7 @@ export function SettingsScreen() {
       } else {
         next.storage.oracleOci = { endpoint, bucket, accessKeyId, secretAccessKey };
       }
-      const adapter = buildAdapter(next);
+      const adapter = await buildAdapter(next);
       await adapter?.authenticate();
       await saveConfig(next);
       setOpenForm(null);
@@ -97,7 +97,7 @@ export function SettingsScreen() {
       const zipConfig = { ...config, storage: { ...config.storage, activeBackend: "local-zip" as const } };
       await saveConfig(zipConfig);
       await pushAllLocalEntries();
-      const adapter = buildAdapter(zipConfig) as LocalZipAdapter;
+      const adapter = (await buildAdapter(zipConfig)) as LocalZipAdapter;
       // Bundled so a fisherman can hit one button and send the resulting
       // .zip when something seems wrong, without needing to know what
       // GitHub is — this is the whole support path for the field beta.
