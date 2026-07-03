@@ -2,11 +2,14 @@ import { processQueue } from "./queue";
 import { mergeEntries } from "./conflict-resolver";
 import {
   allEntries,
+  allSyncJobs,
   getEntry,
   putEntry,
   getAudioBlob,
   enqueueSyncJob,
   getConfig,
+  getAudioVerifiedAt,
+  markAudioVerified,
 } from "../storage/local-db";
 import { buildAdapter } from "../storage/registry";
 import { entryPath, audioPath, type StorageAdapter } from "../storage/interface";
@@ -55,6 +58,24 @@ export async function enqueueAudioForSync(entryId: string, blob: Blob, priority:
   await enqueueSyncJob(job);
 }
 
+/**
+ * "Verified" means read-back confirmed, not "the write call didn't
+ * throw" — a Fable strategic review's whole audio-retention recommendation
+ * depends on this distinction (the sync layer has the worst track record
+ * of any component in this codebase; a write-success-only signal isn't
+ * trustworthy enough to gate anything on, let alone eventual local
+ * deletion). Filters listFiles()'s results by exact path match rather
+ * than trusting the adapter to have already done prefix filtering —
+ * GoogleDriveAdapter's listFiles() lists an entire folder and ignores the
+ * filename portion of its "prefix" argument, so relying on server-side
+ * filtering here would silently pass for the wrong reason.
+ */
+export async function verifyRemoteBlob(adapter: StorageAdapter, path: string, expectedSize: number): Promise<boolean> {
+  const files = await adapter.listFiles(path);
+  const match = files.find((f) => f.path === path);
+  return match !== undefined && match.size === expectedSize;
+}
+
 async function handleJob(job: SyncJob, adapter: StorageAdapter): Promise<void> {
   switch (job.payload.type) {
     case "upload_entry": {
@@ -80,6 +101,17 @@ async function handleJob(job: SyncJob, adapter: StorageAdapter): Promise<void> {
         throw new Error(`Audio for entry ${job.payload.entryId} is missing locally — cannot upload.`);
       }
       await adapter.writeBlob(job.payload.audioPath, blob);
+      const verified = await verifyRemoteBlob(adapter, job.payload.audioPath, blob.size);
+      if (!verified) {
+        // writeBlob() resolving isn't proof of anything — throwing here
+        // (rather than the old "assume success") means an upload that
+        // silently failed server-side gets retried instead of the job
+        // vanishing while marked done.
+        throw new Error(
+          `Upload of audio for entry ${job.payload.entryId} could not be verified against the remote copy — retrying.`,
+        );
+      }
+      await markAudioVerified(job.payload.entryId, nowIso());
       return;
     }
     case "delete_entry": {
@@ -161,6 +193,46 @@ async function refreshManifest(): Promise<void> {
   });
 }
 
+/**
+ * Notices audio that's drifted out of sync with what the device thinks is
+ * archived, and re-queues it. Today, audio gets exactly one upload job,
+ * created at capture time — nothing ever double-checks it again after
+ * that job either succeeds or exhausts its retries. This closes that gap:
+ * any entry with a local audio blob that's neither verified nor currently
+ * queued gets a fresh job. Deliberately does NOT re-verify already-
+ * verified audio (that would mean re-listing the remote on every sync —
+ * a heavier integrity-audit feature, not what this pass is for) and does
+ * NOT attempt anything for entries whose local blob is already gone —
+ * that's a different, unfixable-from-here problem (the audio is just
+ * lost) that the retention-policy work in ROADMAP.md is meant to prevent
+ * from happening in the first place.
+ */
+export async function reconcileAudio(): Promise<{ requeued: number }> {
+  const [local, jobs] = await Promise.all([allEntries(), allSyncJobs()]);
+  const pendingAudioEntryIds = new Set(
+    jobs
+      .map((j) => j.payload)
+      .filter((p): p is Extract<SyncJob["payload"], { type: "upload_audio" }> => p.type === "upload_audio")
+      .map((p) => p.entryId),
+  );
+
+  let requeued = 0;
+  for (const entry of local) {
+    if (!entry.audio) continue; // never had audio
+    if (pendingAudioEntryIds.has(entry.id)) continue; // already queued — don't duplicate
+
+    const verifiedAt = await getAudioVerifiedAt(entry.id);
+    if (verifiedAt) continue; // already confirmed archived
+
+    const blob = await getAudioBlob(entry.id);
+    if (!blob) continue; // nothing locally left to re-upload
+
+    await enqueueAudioForSync(entry.id, blob);
+    requeued++;
+  }
+  return { requeued };
+}
+
 async function getActiveAdapter(): Promise<StorageAdapter | null> {
   const config = await getConfig();
   const adapter = await buildAdapter(config);
@@ -197,6 +269,8 @@ export async function syncNow(): Promise<{ pushed: number; pulled: number }> {
   inFlight = (async () => {
     const pushed = await pushAllLocalEntries();
     const pulled = await pullRemoteEntries();
+    const { requeued } = await reconcileAudio();
+    if (requeued > 0) await drainQueue(); // process the newly re-queued jobs in this same cycle
     return { pushed, pulled };
   })();
   try {

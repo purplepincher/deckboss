@@ -380,16 +380,34 @@ alongside `navigator.storage.estimate()`'s quota when the browser reports
 one, with a plain-language warning past ~75% usage). This is visibility
 only, not the eviction policy itself.
 
-**Explicitly not yet done** — Fable's other pre-beta recommendations,
-real and still open:
-- Verified-upload confirmation (a read-back check after `writeBlob`
-  succeeds, not just trusting the write call didn't throw) — the
-  "verified" concept the whole policy above depends on doesn't actually
-  exist in code yet.
-- An audio reconciliation pass in `syncNow()` that notices archive-
-  missing audio for entries that look synced and re-queues it — today,
-  audio gets exactly one sync job at capture time and nothing ever
-  double-checks it later.
-- The actual eviction machinery (oldest-verified-first deletion under
-  pressure) — deliberately deferred until real field usage shows someone
-  actually approaching quota, which the new storage meter will surface.
+**Since implemented** — the two pieces above marked not-yet-done:
+
+- **Verified-upload confirmation.** `writeBlob()` resolving is no longer
+  treated as proof of anything. `verifyRemoteBlob()` (sync-engine.ts)
+  reads back via `listFiles()` and checks the exact path exists with the
+  exact byte size before the job is allowed to succeed; a mismatch throws,
+  which — same mechanism as the missing-blob fix above — means it retries
+  instead of silently reporting success. "Verified" is now a real,
+  persisted fact: a new IndexedDB store (`markAudioVerified`/
+  `getAudioVerifiedAt` in local-db.ts) records it per entry, deliberately
+  not as a `LogEntry` field (sync state is a fact about a device, not the
+  capture, per Fable's framing). Found and fixed a real bug in the
+  process: `LocalZipAdapter.listFiles()` only ever checked its text-file
+  map, never its blob map, so verification would have silently failed for
+  every local-zip upload — a second real gap, same root pattern as the
+  original IMMUTABLE_FIELDS bug (a piece of state living in two places,
+  only one of which got checked).
+- **Audio reconciliation pass.** `reconcileAudio()`, called from
+  `syncNow()`, catches the case the point-in-time upload-verification fix
+  above can't: audio that was never verified and has no job currently
+  pending — a job that exhausted retries days ago, or any other drift
+  between "device thinks it's synced" and "archive actually has it."
+  Requeues once per entry (checks for an already-pending job first, no
+  duplicates), does nothing for entries whose local blob is already gone
+  (a different, unfixable-from-here problem the retention policy above is
+  meant to prevent).
+
+**Still genuinely not done, on purpose**: the eviction machinery itself
+(oldest-verified-first deletion under storage pressure) — deferred until
+real field usage shows someone actually approaching quota, which the
+storage meter shipped earlier this round will surface.

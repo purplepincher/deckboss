@@ -5,8 +5,14 @@ export function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }
 
-export function mimeToExt(mime: string): string {
-  const base = mime.split(";")[0]?.trim().toLowerCase() ?? "";
+export function mimeToExt(mime: string | undefined | null): string {
+  // A blob round-tripped through IndexedDB can come back with an empty or
+  // missing `.type` (observed via fake-indexeddb in tests; real browsers
+  // are expected to preserve it via structured clone, but this is cheap
+  // insurance against any environment that doesn't) — falls through to
+  // the same "bin" default as any other unrecognized mime type, rather
+  // than throwing on `.split()` of undefined.
+  const base = (mime ?? "").split(";")[0]?.trim().toLowerCase() ?? "";
   switch (base) {
     case "audio/webm":
       return "webm";

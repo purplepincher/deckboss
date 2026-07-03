@@ -31,6 +31,7 @@ const entryStore: UseStore = createStore("deckboss-entries", "entries");
 const audioStore: UseStore = createStore("deckboss-audio", "audio");
 const metaStore: UseStore = createStore("deckboss-meta", "meta");
 const syncQueueStore: UseStore = createStore("deckboss-sync-queue", "sync-queue");
+const audioVerifiedStore: UseStore = createStore("deckboss-audio-verified", "audio-verified");
 
 const CONFIG_KEY = "app-config";
 
@@ -149,6 +150,26 @@ export async function audioStorageBytes(): Promise<number> {
   return blobs.reduce((sum, b) => sum + (b?.size ?? 0), 0);
 }
 
+// ---- Audio upload verification ------------------------------------------
+//
+// Device-local record of "this device confirmed (via a post-upload
+// read-back, not just a write call that didn't throw) that this entry's
+// audio actually exists in the configured remote archive." Deliberately
+// not a field on LogEntry: whether a given device has verified a given
+// blob is a fact about that device's sync state, not about the capture
+// itself, and doesn't belong in something that gets merged across devices.
+// Its own store (rather than a single JSON blob in metaStore) avoids a
+// read-modify-write race if multiple audio uploads verify concurrently.
+
+export async function markAudioVerified(entryId: string, verifiedAtIso: string): Promise<void> {
+  await set(entryId, verifiedAtIso, audioVerifiedStore);
+}
+
+export async function getAudioVerifiedAt(entryId: string): Promise<string | null> {
+  const v = await get<string>(entryId, audioVerifiedStore);
+  return v ?? null;
+}
+
 // ---- App config (local-only, never synced — see config/schema.ts) --------
 
 export async function getConfig(): Promise<AppConfig> {
@@ -212,6 +233,7 @@ export async function verifyStoreIntegrity(): Promise<StoreIntegrityResult> {
     ["audio", audioStore],
     ["meta", metaStore],
     ["sync-queue", syncQueueStore],
+    ["audio-verified", audioVerifiedStore],
   ];
 
   const failedStores: string[] = [];

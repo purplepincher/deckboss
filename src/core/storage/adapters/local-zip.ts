@@ -49,10 +49,20 @@ export class LocalZipAdapter implements StorageAdapter {
   }
 
   async listFiles(prefix: string): Promise<FileMetadata[]> {
+    // Blobs (audio) live in a separate map from text files — this used to
+    // only check `this.files`, so listing/verifying anything under
+    // ATTACHMENTS_DIR always came back empty regardless of what was
+    // actually written via writeBlob(). Harmless while nothing called
+    // listFiles() for audio paths; became a real bug the moment upload
+    // verification started checking a blob's presence this way.
     const now = new Date().toISOString();
-    return [...this.files.entries()]
+    const textEntries = [...this.files.entries()]
       .filter(([p]) => p.startsWith(prefix))
       .map(([p, content]) => ({ path: p, size: new Blob([content]).size, modifiedAt: now }));
+    const blobEntries = [...this.blobs.entries()]
+      .filter(([p]) => p.startsWith(prefix))
+      .map(([p, blob]) => ({ path: p, size: blob.size, modifiedAt: now }));
+    return [...textEntries, ...blobEntries];
   }
 
   async readBlob(path: string): Promise<Blob> {
