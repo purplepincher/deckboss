@@ -29,12 +29,48 @@ interface DeckBossStore {
   saveConfig: (config: AppConfig) => Promise<void>;
 }
 
+// Cache the corrections-applied view so repeated `loadEntries()` calls only
+// re-fold entries whose corrections actually changed. Since a `LogEntry` is
+// immutable except for additive corrections, the signature of its corrections
+// array is enough to detect change.
+const effectiveCache = new Map<string, EffectiveLogEntry>();
+const correctionSignature = new Map<string, string>();
+
+function correctionsSig(entry: LogEntry): string {
+  const cs = entry.corrections;
+  return `${cs.length}:${cs[cs.length - 1]?.id ?? ""}`;
+}
+
 export const useDeckBossStore = create<DeckBossStore>((set, get) => ({
   entries: [],
   entriesLoaded: false,
   loadEntries: async () => {
     const raw = await allEntries();
-    set({ entries: raw.map(applyCorrections), entriesLoaded: true });
+    const next: EffectiveLogEntry[] = [];
+    const seen = new Set<string>();
+
+    for (const entry of raw) {
+      seen.add(entry.id);
+      const sig = correctionsSig(entry);
+      const cached = effectiveCache.get(entry.id);
+      if (cached && correctionSignature.get(entry.id) === sig) {
+        next.push(cached);
+      } else {
+        const effective = applyCorrections(entry);
+        effectiveCache.set(entry.id, effective);
+        correctionSignature.set(entry.id, sig);
+        next.push(effective);
+      }
+    }
+
+    for (const id of effectiveCache.keys()) {
+      if (!seen.has(id)) {
+        effectiveCache.delete(id);
+        correctionSignature.delete(id);
+      }
+    }
+
+    set({ entries: next, entriesLoaded: true });
   },
   saveEntry: async (entry) => {
     await putEntryLocal(entry);
