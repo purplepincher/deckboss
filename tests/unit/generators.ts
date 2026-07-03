@@ -25,12 +25,12 @@ export function arbitraryCorrection(): fc.Arbitrary<Correction> {
           language: fc.constant('en-US'),
           engine: fc.constant<'webspeech' | 'whisper-1'>('webspeech'),
         }),
-        { nil: false },
+        { nil: undefined },
       ),
-      entities: fc.constant([] as Correction['fields']['entities']),
-      tags: fc.constant([] as Correction['fields']['tags']),
+      entities: fc.constant([] as NonNullable<Correction['fields']>['entities']),
+      tags: fc.constant([] as NonNullable<Correction['fields']>['tags']),
     }),
-    { nil: true },
+    { nil: undefined },
   );
 
   return fc.record({
@@ -38,7 +38,7 @@ export function arbitraryCorrection(): fc.Arbitrary<Correction> {
     created_at: recentDateArb,
     type: fc.constantFrom('amend' as const, 'retract' as const),
     author: fc.constant(undefined) as fc.Arbitrary<Correction['author']>,
-    reason: fc.option(fc.string({ minLength: 1, maxLength: 50 }), { nil: true }),
+    reason: fc.option(fc.string({ minLength: 1, maxLength: 50 }), { nil: undefined }),
     fields: fieldsArb,
   }) as unknown as fc.Arbitrary<Correction>;
 }

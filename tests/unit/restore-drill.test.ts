@@ -60,6 +60,7 @@ import { mimeToExt } from "../../src/utils/file";
  */
 
 const LOCAL_ZIP_CONFIG = { ...defaultAppConfig(), storage: { activeBackend: "local-zip" as const } };
+const TEST_DEVICE_ID = crypto.randomUUID();
 
 // The five IndexedDB databases local-db.ts owns (see its header comment:
 // "each store gets its OWN database"). Wiping all five is what "a
@@ -87,6 +88,7 @@ async function captureEntry(params: {
   timestamp?: string;
 }): Promise<LogEntry> {
   const entry = await buildEntry({
+    deviceId: TEST_DEVICE_ID,
     audioBlob: params.audioBlob,
     gps: null,
     transcript: params.transcript,
@@ -107,7 +109,10 @@ async function amend(entryId: string, fields: EditableFields, reason?: string, a
   const raw = await getEntry(entryId);
   if (!raw) throw new Error(`amend(): entry ${entryId} not found locally`);
   // Mirrors state/store.ts's amendEntry exactly.
-  const next: LogEntry = { ...raw, corrections: [...raw.corrections, buildAmendCorrection(fields, reason, author)] };
+  const next: LogEntry = {
+    ...raw,
+    corrections: [...raw.corrections, buildAmendCorrection(fields, TEST_DEVICE_ID, reason, author)],
+  };
   await putEntry(next);
   await enqueueEntryForSync(next.id);
   return next;
@@ -117,7 +122,10 @@ async function retract(entryId: string, reason?: string, author?: CorrectionAuth
   const raw = await getEntry(entryId);
   if (!raw) throw new Error(`retract(): entry ${entryId} not found locally`);
   // Mirrors state/store.ts's retractEntry exactly.
-  const next: LogEntry = { ...raw, corrections: [...raw.corrections, buildRetractCorrection(reason, author)] };
+  const next: LogEntry = {
+    ...raw,
+    corrections: [...raw.corrections, buildRetractCorrection(TEST_DEVICE_ID, reason, author)],
+  };
   await putEntry(next);
   await enqueueEntryForSync(next.id);
   return next;
@@ -386,7 +394,12 @@ describe("restore drill, adversarial: audio that was never verified/uploaded bef
     // refresh the manifest — using it here (rather than drainQueue alone)
     // avoids a self-inflicted "stale manifest" failure that would hide
     // what this test is actually about.
-    const entry2 = await buildEntry({ audioBlob: audioBlobFor("never uploaded 2"), gps: null, source: "voice" });
+    const entry2 = await buildEntry({
+      deviceId: TEST_DEVICE_ID,
+      audioBlob: audioBlobFor("never uploaded 2"),
+      gps: null,
+      source: "voice",
+    });
     await putEntry(entry2);
     await enqueueEntryForSync(entry2.id);
     await putAudioBlob(entry2.id, audioBlobFor("never uploaded 2"));

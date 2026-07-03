@@ -76,20 +76,20 @@ describe("assertWriteIsAdditive", () => {
 
   it("rejects changing transcript directly (must use a correction)", () => {
     const previous = baseEntry();
-    previous.transcript = { text: "original", confidence: 0.9, language: "en", engine: "webspeech" };
+    previous.transcript = { text: "original", confidence: 0.9, language: "en", engine: "webspeech" as const };
     const next = {
       ...previous,
-      transcript: { text: "mutated", confidence: 0.9, language: "en", engine: "webspeech" },
+      transcript: { text: "mutated", confidence: 0.9, language: "en", engine: "webspeech" as const },
     };
     expect(() => assertWriteIsAdditive(previous, next)).toThrow(InvariantViolationError);
   });
 
   it("rejects changing entities directly (must use a correction)", () => {
     const previous = baseEntry();
-    previous.entities = [{ type: "gear", value: "crab pots", confidence: 0.9 }];
+    previous.entities = [{ type: "gear" as const, value: "crab pots", confidence: 0.9 }];
     const next = {
       ...previous,
-      entities: [{ type: "species", value: "lobster", confidence: 0.9 }],
+      entities: [{ type: "species" as const, value: "lobster", confidence: 0.9 }],
     };
     expect(() => assertWriteIsAdditive(previous, next)).toThrow(InvariantViolationError);
   });

@@ -3,6 +3,8 @@ import { mergeEntries, detectCoreFieldConflict } from "../../src/core/sync/confl
 import { newEntrySkeleton } from "../../src/core/types/log-entry";
 import { buildAmendCorrection, buildRetractCorrection } from "../../src/core/tensor-log/entry-builder";
 
+const DEVICE_ID = crypto.randomUUID();
+
 function baseEntry() {
   return newEntrySkeleton({
     id: crypto.randomUUID(),
@@ -16,8 +18,8 @@ function baseEntry() {
 describe("mergeEntries", () => {
   it("unions two devices' distinct corrections instead of picking a winner", () => {
     const shared = baseEntry();
-    const local = { ...shared, corrections: [buildAmendCorrection({ tags: ["from-device-a"] })] };
-    const remote = { ...shared, corrections: [buildRetractCorrection("from-device-b")] };
+    const local = { ...shared, corrections: [buildAmendCorrection({ tags: ["from-device-a"] }, DEVICE_ID)] };
+    const remote = { ...shared, corrections: [buildRetractCorrection(DEVICE_ID, "from-device-b")] };
 
     const merged = mergeEntries(local, remote);
     expect(merged.corrections).toHaveLength(2);
@@ -26,7 +28,7 @@ describe("mergeEntries", () => {
 
   it("deduplicates the same correction id seen from both sides", () => {
     const shared = baseEntry();
-    const correction = buildAmendCorrection({ tags: ["x"] });
+    const correction = buildAmendCorrection({ tags: ["x"] }, DEVICE_ID);
     const local = { ...shared, corrections: [correction] };
     const remote = { ...shared, corrections: [correction] };
 
@@ -36,8 +38,8 @@ describe("mergeEntries", () => {
 
   it("sorts merged corrections chronologically", () => {
     const shared = baseEntry();
-    const older = { ...buildAmendCorrection({ tags: ["old"] }), created_at: "2026-01-01T00:00:00.000Z" };
-    const newer = { ...buildAmendCorrection({ tags: ["new"] }), created_at: "2026-06-01T00:00:00.000Z" };
+    const older = { ...buildAmendCorrection({ tags: ["old"] }, DEVICE_ID), created_at: "2026-01-01T00:00:00.000Z" };
+    const newer = { ...buildAmendCorrection({ tags: ["new"] }, DEVICE_ID), created_at: "2026-06-01T00:00:00.000Z" };
     const local = { ...shared, corrections: [newer] };
     const remote = { ...shared, corrections: [older] };
 
