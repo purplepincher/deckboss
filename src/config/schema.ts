@@ -52,6 +52,11 @@ export type GoogleDriveConfig = z.infer<typeof GoogleDriveConfigSchema>;
 
 export const AppConfigSchema = z.object({
   version: z.string(),
+  // Stable, locally-generated device identifier. Lives in local-only config
+  // (never synced) so every correction can be stamped with the device that
+  // created it. Required for all configs created after this field was added;
+  // old configs on disk are backfilled on load (see local-db.ts:getConfig).
+  deviceId: z.string().uuid(),
 
   storage: z.object({
     activeBackend: StorageBackendIdSchema.nullable(),
@@ -79,9 +84,17 @@ export const AppConfigSchema = z.object({
 });
 export type AppConfig = z.infer<typeof AppConfigSchema>;
 
+// Backfill schema for configs persisted before deviceId existed. Keeps the
+// rest of the shape strict so unrelated parse failures still fall through to
+// defaultAppConfig() rather than silently corrupting settings.
+export const AppConfigBackfillSchema = AppConfigSchema.extend({
+  deviceId: z.string().uuid().optional(),
+});
+
 export function defaultAppConfig(): AppConfig {
   return {
     version: "1.0",
+    deviceId: crypto.randomUUID(),
     storage: { activeBackend: null },
     transcription: { engine: "webspeech", language: "en" },
     recording: { maxDurationMs: 300_000, autoStopSilenceMs: 3_000, shakeToRecord: false },

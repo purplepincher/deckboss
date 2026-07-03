@@ -3,6 +3,8 @@ import { assertWriteIsAdditive, InvariantViolationError } from "../../src/core/t
 import { newEntrySkeleton } from "../../src/core/types/log-entry";
 import { buildAmendCorrection, buildRetractCorrection } from "../../src/core/tensor-log/entry-builder";
 
+const DEVICE_ID = crypto.randomUUID();
+
 function baseEntry() {
   return newEntrySkeleton({
     id: crypto.randomUUID(),
@@ -21,27 +23,27 @@ describe("assertWriteIsAdditive", () => {
 
   it("allows appending a new correction", () => {
     const previous = baseEntry();
-    const next = { ...previous, corrections: [buildAmendCorrection({ tags: ["x"] })] };
+    const next = { ...previous, corrections: [buildAmendCorrection({ tags: ["x"] }, DEVICE_ID)] };
     expect(() => assertWriteIsAdditive(previous, next)).not.toThrow();
   });
 
   it("allows a sync-merge-shaped write (superset of existing corrections)", () => {
-    const c1 = buildAmendCorrection({ tags: ["from-this-device"] });
-    const c2 = buildRetractCorrection("from-remote-device");
+    const c1 = buildAmendCorrection({ tags: ["from-this-device"] }, DEVICE_ID);
+    const c2 = buildRetractCorrection(DEVICE_ID, "from-remote-device");
     const previous = { ...baseEntry(), corrections: [c1] };
     const merged = { ...previous, corrections: [c1, c2] }; // conflict-resolver.mergeEntries's shape
     expect(() => assertWriteIsAdditive(previous, merged)).not.toThrow();
   });
 
   it("rejects removing a previously-committed correction", () => {
-    const c1 = buildAmendCorrection({ tags: ["x"] });
+    const c1 = buildAmendCorrection({ tags: ["x"] }, DEVICE_ID);
     const previous = { ...baseEntry(), corrections: [c1] };
     const next = { ...previous, corrections: [] };
     expect(() => assertWriteIsAdditive(previous, next)).toThrow(InvariantViolationError);
   });
 
   it("rejects modifying a previously-committed correction", () => {
-    const c1 = buildAmendCorrection({ tags: ["original"] });
+    const c1 = buildAmendCorrection({ tags: ["original"] }, DEVICE_ID);
     const previous = { ...baseEntry(), corrections: [c1] };
     const tampered = { ...c1, reason: "sneaky edit" };
     const next = { ...previous, corrections: [tampered] };
@@ -103,7 +105,7 @@ describe("assertWriteIsAdditive", () => {
   });
 
   it("allows re-writing an entry with corrections unchanged (idempotent write)", () => {
-    const c1 = buildAmendCorrection({ tags: ["x"] });
+    const c1 = buildAmendCorrection({ tags: ["x"] }, DEVICE_ID);
     const previous = { ...baseEntry(), corrections: [c1] };
     const next = { ...previous };
     expect(() => assertWriteIsAdditive(previous, next)).not.toThrow();

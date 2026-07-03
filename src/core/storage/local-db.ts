@@ -1,7 +1,7 @@
 import { get, set, del, keys, values, entries, createStore, type UseStore } from "idb-keyval";
 import { LogEntrySchema, type LogEntry } from "../types/log-entry";
 import { SCHEMA_VERSION } from "../types/common";
-import { AppConfigSchema, defaultAppConfig, type AppConfig } from "../../config/schema";
+import { AppConfigSchema, AppConfigBackfillSchema, defaultAppConfig, type AppConfig } from "../../config/schema";
 import { SyncJobSchema, type SyncJob } from "../sync/types";
 import { assertWriteIsAdditive } from "../tensor-log/invariants";
 
@@ -193,8 +193,21 @@ export async function allAudioVerifiedAt(): Promise<Map<string, string>> {
 export async function getConfig(): Promise<AppConfig> {
   const raw = await get(CONFIG_KEY, metaStore);
   if (!raw) return defaultAppConfig();
+
   const result = AppConfigSchema.safeParse(raw);
-  return result.success ? result.data : defaultAppConfig();
+  if (result.success) return result.data;
+
+  // Narrow backfill: configs saved before deviceId existed should not lose
+  // their other settings. If the shape is otherwise valid, generate a deviceId
+  // and persist the upgraded config.
+  const legacy = AppConfigBackfillSchema.safeParse(raw);
+  if (legacy.success) {
+    const backfilled: AppConfig = { ...legacy.data, deviceId: crypto.randomUUID() };
+    await setConfig(backfilled);
+    return backfilled;
+  }
+
+  return defaultAppConfig();
 }
 
 export async function setConfig(config: AppConfig): Promise<void> {

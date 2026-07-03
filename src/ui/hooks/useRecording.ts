@@ -132,6 +132,7 @@ export function useRecording() {
 
     try {
       const entry = await buildEntry({
+        deviceId: config.deviceId,
         audioBlob: blob,
         gps: gpsRef.current,
         transcript,

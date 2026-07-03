@@ -4,6 +4,8 @@ import { newEntrySkeleton } from "../../src/core/types/log-entry";
 import { applyCorrections, buildRetractCorrection } from "../../src/core/tensor-log/entry-builder";
 import type { EffectiveLogEntry } from "../../src/core/types/log-entry";
 
+const DEVICE_ID = crypto.randomUUID();
+
 function makeEffective(overrides: {
   id?: string;
   daysAgo?: number;
@@ -40,7 +42,7 @@ function makeEffective(overrides: {
     raw.entities = [{ type: overrides.entityType, value: "x", confidence: 0.9 }];
   }
   if (overrides.retracted) {
-    raw.corrections.push(buildRetractCorrection("test"));
+    raw.corrections.push(buildRetractCorrection(DEVICE_ID, "test"));
   }
   return applyCorrections(raw);
 }
