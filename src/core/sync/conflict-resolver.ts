@@ -19,7 +19,7 @@ export function mergeEntries(local: LogEntry, remote: LogEntry): LogEntry {
   return { ...local, corrections: merged };
 }
 
-function dedupeCorrections(corrections: Correction[]): Correction[] {
+export function dedupeCorrections(corrections: Correction[]): Correction[] {
   const seen = new Map<string, Correction>();
   for (const c of corrections) {
     if (!seen.has(c.id)) seen.set(c.id, c);
