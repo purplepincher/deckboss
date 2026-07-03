@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import fc from 'fast-check';
-import { mergeEntries, dedupeCorrections } from '../../core/sync/conflict-resolver';
-import type { LogEntry, Correction } from '../../core/types/log-entry';
-import { newEntrySkeleton } from '../../core/types/log-entry';
+import { mergeEntries, dedupeCorrections } from '../../src/core/sync/conflict-resolver';
+import type { LogEntry, Correction } from '../../src/core/types/log-entry';
+import { newEntrySkeleton } from '../../src/core/types/log-entry';
 import { arbitraryCorrection } from './generators';
 
 // Helper: create a base entry with a fixed id and timestamp.

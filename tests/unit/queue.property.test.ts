@@ -1,11 +1,11 @@
 import { describe, it, expect, vi } from 'vitest';
 import fc from 'fast-check';
-import { processQueue } from '../../core/sync/queue';
-import type { SyncJob } from '../../core/sync/types';
-import type { StorageAdapter } from '../../core/storage/interface';
-import * as localDb from '../../core/storage/local-db';
+import { processQueue } from '../../src/core/sync/queue';
+import type { SyncJob } from '../../src/core/sync/types';
+import type { StorageAdapter } from '../../src/core/storage/interface';
+import * as localDb from '../../src/core/storage/local-db';
 
-vi.mock('../../core/storage/local-db');
+vi.mock('../../src/core/storage/local-db');
 
 const mockedLocalDb = vi.mocked(localDb);
 
@@ -37,7 +37,7 @@ describe('queue property tests', () => {
       fc.asyncProperty(
         fc.array(
           fc.record({
-            id: fc.uuidV4(),
+            id: fc.uuid(),
             priority: fc.integer({ min: 0, max: 3 }),
             createdAt: fc.date().map(d => d.toISOString()),
             maxRetries: fc.integer({ min: 1, max: 5 }),

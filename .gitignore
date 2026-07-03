@@ -33,3 +33,4 @@ GLM_SUMMARY.md
 *-audit.log
 *-audit-retry.log
 *.chat.history.md
+.aider*

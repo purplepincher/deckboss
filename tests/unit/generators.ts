@@ -1,12 +1,11 @@
 import fc from 'fast-check';
-import type { LogEntry, Correction } from '../../core/types/log-entry';
-import { newEntrySkeleton } from '../../core/types/log-entry';
-import { SCHEMA_VERSION } from '../../core/types/common';
+import type { LogEntry, Correction } from '../../src/core/types/log-entry';
+import { newEntrySkeleton } from '../../src/core/types/log-entry';
 
 // ---------------------------------------------------------------------------
 // Primitives
 // ---------------------------------------------------------------------------
-const uuidArb = fc.uuidV4();
+const uuidArb = fc.uuid();
 
 const threeHoursAgo = new Date(Date.now() - 3 * 60 * 60 * 1000);
 const now = new Date();
