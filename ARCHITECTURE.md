@@ -60,6 +60,18 @@ know a shape that isn't declared in one of these:
   `EffectiveLogEntry` — the folded view — so the additive-correction
   invariant (see log-entry.ts's doc comment) can't be accidentally bypassed
   by code that forgot corrections exist.
+
+  **Retraction does not freeze field values:** A `retract` correction sets
+  the `retracted` boolean flag on the effective entry but does **not**
+  prevent later (chronologically) `amend` corrections from updating
+  `transcript`, `entities`, or `tags`. This is deliberate: a retracted
+  entry is hidden from the UI, but the underlying effective fields reflect
+  the full history so that an “un-retract” (a later amend that restores
+  desired values) is possible without re-creating data. If future work
+  introduces a concept of “hard delete” that discards fields, it must be
+  handled outside the `corrections` array (for example, a garbage-collection
+  process that actually erases the entry).
+
 - **sync-engine.ts is the only caller of StorageAdapter methods.** UI code
   never imports `adapters/*` directly — it enqueues a `SyncJob` and reads
   status via `useSync`. This is what makes offline-first not a special case:

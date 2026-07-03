@@ -24,9 +24,15 @@ function dedupeCorrections(corrections: Correction[]): Correction[] {
   for (const c of corrections) {
     if (!seen.has(c.id)) seen.set(c.id, c);
   }
-  return [...seen.values()].sort(
-    (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
-  );
+  return [...seen.values()].sort((a, b) => {
+    const timeDiff =
+      new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+    if (timeDiff !== 0) return timeDiff;
+    // Tiebreaker: sort deterministically by correction id so that the same
+    // set of corrections always produces the same final order regardless of
+    // which entries the caller merges first.
+    return a.id.localeCompare(b.id);
+  });
 }
 
 /**
