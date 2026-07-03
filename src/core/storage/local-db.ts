@@ -36,15 +36,44 @@ const CONFIG_KEY = "app-config";
 
 // ---- Entries -----------------------------------------------------------
 
+// Per-id async mutex: putEntry() does read-check-write (get existing,
+// assertWriteIsAdditive, set), which is a classic lost-update race if two
+// writes for the *same* entry overlap — e.g. a sync pull merging a remote
+// correction while the UI amends the same entry. Both would read the same
+// `existing`, both would pass the additive check against that stale
+// value, and whichever `set()` finishes second would silently discard the
+// other's write. Caught in a multi-model review round; previously
+// unreachable in practice because sync silently never ran at all (see the
+// registry.ts adapter-caching fix) — now that sync actually works, this
+// race is live. Each id gets its own queue so unrelated entries still
+// write concurrently; only same-id writes serialize.
+const entryLocks = new Map<string, Promise<void>>();
+
+function withEntryLock<T>(id: string, fn: () => Promise<T>): Promise<T> {
+  const previous = entryLocks.get(id) ?? Promise.resolve();
+  const result = previous.then(fn, fn);
+  entryLocks.set(
+    id,
+    result.then(
+      () => undefined,
+      () => undefined,
+    ),
+  );
+  return result;
+}
+
 export async function putEntry(entry: LogEntry): Promise<void> {
   LogEntrySchema.parse(entry); // throws on shape drift — catch bugs at the write, not the read
-  const existing = await get<LogEntry>(entry.id, entryStore);
-  // The one invariant the whole product's trustworthiness rests on:
-  // committed entries are never mutated, only appended to. Enforced here,
-  // in the single write path, regardless of whether the caller is the UI
-  // (amend/retract) or sync-engine (pulling and merging a remote copy).
-  assertWriteIsAdditive(existing, entry);
-  await set(entry.id, entry, entryStore);
+  await withEntryLock(entry.id, async () => {
+    const existing = await get<LogEntry>(entry.id, entryStore);
+    // The one invariant the whole product's trustworthiness rests on:
+    // committed entries are never mutated, only appended to. Enforced
+    // here, in the single write path, regardless of whether the caller is
+    // the UI (amend/retract) or sync-engine (pulling and merging a remote
+    // copy).
+    assertWriteIsAdditive(existing, entry);
+    await set(entry.id, entry, entryStore);
+  });
 }
 
 export async function getEntry(id: string): Promise<LogEntry | undefined> {

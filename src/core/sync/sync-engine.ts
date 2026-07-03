@@ -170,8 +170,25 @@ async function getActiveAdapter(): Promise<StorageAdapter | null> {
   return (await adapter.isAuthenticated()) ? adapter : null;
 }
 
+// useSync.ts can trigger this both from the online/offline listener and
+// from a manual "tap to retry" — without a guard, two overlapping runs
+// would push/pull redundantly and both call refreshManifest(). Not data-
+// unsafe (every step here is already idempotent/additive), just wasteful
+// and confusing if a user taps retry while a background sync is already
+// in flight. A concurrent second call gets the first call's in-flight
+// result instead of starting its own.
+let inFlight: Promise<{ pushed: number; pulled: number }> | null = null;
+
 export async function syncNow(): Promise<{ pushed: number; pulled: number }> {
-  const pushed = await pushAllLocalEntries();
-  const pulled = await pullRemoteEntries();
-  return { pushed, pulled };
+  if (inFlight) return inFlight;
+  inFlight = (async () => {
+    const pushed = await pushAllLocalEntries();
+    const pulled = await pullRemoteEntries();
+    return { pushed, pulled };
+  })();
+  try {
+    return await inFlight;
+  } finally {
+    inFlight = null;
+  }
 }

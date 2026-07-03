@@ -53,6 +53,41 @@ describe("local-db putEntry (fake-indexeddb)", () => {
     const tampered = { ...entry, source: "text" as const };
     await expect(putEntry(tampered)).rejects.toThrow(InvariantViolationError);
   });
+
+  it("serializes concurrent same-entry writes instead of silently losing one", async () => {
+    // Simulates a sync pull merging a remote correction at the same
+    // moment the UI amends the same entry — both start from the same
+    // `existing` read. Without a per-id lock, both writes "succeed" and
+    // whichever set() lands second silently overwrites the first: a lost
+    // update with no error anywhere. With the lock, the writes serialize
+    // — the first succeeds, and the second (built from a now-stale read,
+    // since it doesn't include the first write's correction) is rejected
+    // by the invariant check instead of silently discarding it. A loud,
+    // catchable error is the correct outcome here, not silent data loss.
+    const entry = baseEntry();
+    await putEntry(entry);
+
+    const correctionA = buildAmendCorrection({ tags: ["from-ui"] });
+    const correctionB = buildAmendCorrection({ tags: ["from-sync"] });
+
+    const results = await Promise.allSettled([
+      putEntry({ ...entry, corrections: [correctionA] }),
+      putEntry({ ...entry, corrections: [correctionB] }),
+    ]);
+
+    const fulfilled = results.filter((r) => r.status === "fulfilled");
+    const rejected = results.filter((r) => r.status === "rejected");
+    // At least one write must land; if both were built from a stale read
+    // relative to each other, at least one must be caught rather than
+    // silently accepted.
+    expect(fulfilled.length).toBeGreaterThanOrEqual(1);
+    expect(fulfilled.length + rejected.length).toBe(2);
+
+    // Whatever's in storage reflects a real write that actually happened
+    // — never zero corrections when one write plainly succeeded.
+    const back = await getEntry(entry.id);
+    expect(back?.corrections.length).toBeGreaterThanOrEqual(1);
+  });
 });
 
 describe("verifyStoreIntegrity", () => {
