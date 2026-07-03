@@ -24,10 +24,20 @@
       allowlist would silently break that for any endpoint not already
       known about, which is worse than the marginal protection a
       tighter connect-src would add here.
+
+      media-src explicitly allows blob: — recorded audio is played back
+      via AudioPlayer.ts's `new Audio(URL.createObjectURL(blob))`, and
+      without this it silently falls back to default-src 'self', which
+      does not cover blob: URLs. Shipped without this the first time and
+      a beta-test round caught it: audio played back a blob: URL that CSP
+      then blocked, breaking every recording's playback with a console
+      error and no visible on-screen indication. This is exactly the kind
+      of self-inflicted regression a security tightening pass can cause —
+      worth remembering when this policy gets touched again.
     -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; object-src 'none'; base-uri 'self'; connect-src *;"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self' blob:; object-src 'none'; base-uri 'self'; connect-src *;"
     />
     <link rel="icon" href="/icons/icon-192x192.png" />
     <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
