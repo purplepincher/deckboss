@@ -15,6 +15,9 @@ const IMMUTABLE_FIELDS = [
   "source",
   "thread_id",
   "version",
+  "transcript",
+  "entities",
+  "tags",
 ] as const satisfies readonly (keyof LogEntry)[];
 
 /**
