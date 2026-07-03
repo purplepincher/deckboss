@@ -8,6 +8,8 @@ import { putAudioBlob } from "../../core/storage/local-db";
 import { useDeckBossStore } from "../../state/store";
 import { enqueueEntryForSync, enqueueAudioForSync } from "../../core/sync/sync-engine";
 import type { GPSReading, TranscriptResult } from "../../core/types/log-entry";
+import { recordRecordingStarted, recordRecordingCompleted, recordRecordingFailed } from "../../core/diagnostics";
+import { vibrateSaved, vibrateFailed } from "../../utils/haptics";
 
 export type RecordingPhase = "idle" | "recording" | "saving" | "saved" | "error";
 
@@ -65,8 +67,12 @@ export function useRecording() {
           : "Could not start recording — check microphone permissions.",
       );
       recorderRef.current = null;
+      void recordRecordingFailed();
+      vibrateFailed();
       return;
     }
+
+    void recordRecordingStarted();
 
     if (config.transcription.engine === "webspeech" && isWebSpeechSupported()) {
       const transcriber = new WebSpeechTranscriber();
@@ -94,10 +100,22 @@ export function useRecording() {
     const blob = await recorderRef.current.stop();
     recorderRef.current = null;
 
-    const liveTranscript = transcriberRef.current?.stop();
+    const transcriber = transcriberRef.current;
+    const liveTranscript = transcriber?.stop();
+    const hadNetworkError = transcriber?.hadNetworkError ?? false;
     transcriberRef.current = null;
 
     let transcript: TranscriptResult | undefined = liveTranscript;
+    // Web Speech is network-backed on most browsers — offline, recognition
+    // errors out and finalChunks stays empty, which used to get attached
+    // as a confident-looking blank transcript indistinguishable from "you
+    // said nothing." Leave transcript unset instead: the entry still
+    // saves (audio + GPS + timestamp intact), but its transcript stays
+    // null so the UI can tell a fisherman "no signal, audio saved" rather
+    // than silently looking like nothing was captured.
+    if (transcript && transcript.text === "" && hadNetworkError) {
+      transcript = undefined;
+    }
     if (config.transcription.engine === "whisper" && config.transcription.whisperApiKey) {
       try {
         transcript = await transcribeWithWhisper(
@@ -140,10 +158,14 @@ export function useRecording() {
 
       setElapsedMs(0);
       setPhase("saved");
+      void recordRecordingCompleted();
+      vibrateSaved();
       setTimeout(() => setPhase("idle"), 1500);
     } catch (err) {
       setPhase("error");
       setError(err instanceof Error ? err.message : "Could not save the recording.");
+      void recordRecordingFailed();
+      vibrateFailed();
     }
   }, [config, saveEntry]);
 

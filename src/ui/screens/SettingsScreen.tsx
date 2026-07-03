@@ -4,6 +4,8 @@ import { buildAdapter } from "../../core/storage/registry";
 import { LocalZipAdapter } from "../../core/storage/adapters/local-zip";
 import { pushAllLocalEntries } from "../../core/sync/sync-engine";
 import type { StorageBackendId } from "../../core/storage/interface";
+import { getDiagnostics, type Diagnostics } from "../../core/diagnostics";
+import { isStoragePersisted } from "../../core/storage/persistence";
 
 const BACKENDS: { id: StorageBackendId; label: string }[] = [
   { id: "google-drive", label: "Google Drive" },
@@ -18,10 +20,17 @@ export function SettingsScreen() {
   const loadConfig = useDeckBossStore((s) => s.loadConfig);
   const saveConfig = useDeckBossStore((s) => s.saveConfig);
   const [busy, setBusy] = useState<string | null>(null);
+  const [diagnostics, setDiagnostics] = useState<Diagnostics | null>(null);
+  const [persisted, setPersisted] = useState<boolean | null>(null);
 
   useEffect(() => {
     if (!configLoaded) void loadConfig();
   }, [configLoaded, loadConfig]);
+
+  useEffect(() => {
+    void getDiagnostics().then(setDiagnostics);
+    void isStoragePersisted().then(setPersisted);
+  }, []);
 
   const connect = async (id: StorageBackendId) => {
     setBusy(id);
@@ -64,6 +73,15 @@ export function SettingsScreen() {
       await saveConfig(zipConfig);
       await pushAllLocalEntries();
       const adapter = buildAdapter(zipConfig) as LocalZipAdapter;
+      // Bundled so a fisherman can hit one button and send the resulting
+      // .zip when something seems wrong, without needing to know what
+      // GitHub is — this is the whole support path for the field beta.
+      const currentDiagnostics = await getDiagnostics();
+      const persistedNow = await isStoragePersisted();
+      await adapter.writeFile(
+        "diagnostics.json",
+        JSON.stringify({ ...currentDiagnostics, storagePersisted: persistedNow }, null, 2),
+      );
       const blob = await adapter.exportZip();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -156,6 +174,26 @@ export function SettingsScreen() {
             <option value={600_000}>10 min</option>
           </select>
         </div>
+      </div>
+
+      <div className="settings-section">
+        <h2>SUPPORT</h2>
+        <div className="settings-row">
+          <label>Something wrong?</label>
+          <button className="btn" disabled={busy === "export"} onClick={() => void exportZip()}>
+            {busy === "export" ? "Exporting…" : "Export everything →"}
+          </button>
+        </div>
+        {diagnostics && (
+          <p style={{ fontSize: 12, opacity: 0.6, marginTop: 8 }}>
+            {diagnostics.recordingsCompleted} saved · {diagnostics.recordingsFailed} failed to start ·{" "}
+            {diagnostics.syncFailures} sync error{diagnostics.syncFailures === 1 ? "" : "s"}
+          </p>
+        )}
+        <p style={{ fontSize: 12, opacity: 0.5, marginTop: 4 }}>
+          Storage: {persisted === null ? "checking…" : persisted ? "persistent ✓" : "not persistent ⚠"}
+          {persisted === false && " — install this app to your home screen to protect it from being cleared."}
+        </p>
       </div>
 
       <div className="settings-section">

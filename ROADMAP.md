@@ -64,6 +64,99 @@ roadmap matters. This is not something an agent can do — it's the one
 action item that's actually on the humans running this project, not on
 whoever's writing code next.
 
+**Update: fishermen are lined up.** This triggered a second Fable review —
+`FABLE_FIELD_READINESS.md` — specifically about whether the app is safe to
+hand to someone whose season depends on it, not more roadmap strategy.
+
+## Pre-launch hardening pass (post field-readiness review)
+
+Fable's memo found the actual highest-risk gap wasn't on the readiness
+brief's own list: **both transcription engines (Web Speech and Whisper)
+are network-backed**, and commercial fishermen spend most of a trip
+outside cell coverage — offline isn't an edge case for this product, it's
+the primary operating environment. Verified against the code: this was a
+real, live bug. `webspeech.ts`'s error handler treated a "network" failure
+identically to benign silence, and `useRecording.ts` always attached
+whatever came back — including a confident-looking empty result — as if
+it were a legitimate transcript. A fisherman recording with zero bars got
+a saved entry that silently looked like they'd said nothing.
+
+Shipped this pass:
+- [x] `webspeech.ts` now distinguishes a real "network" failure from
+      genuine silence; `useRecording.ts` leaves `transcript` unset on a
+      network failure instead of attaching an empty-but-confident result.
+      Audio, GPS, and timestamp are still saved either way — only the
+      transcript is affected.
+- [x] Honest UI copy: "No transcript — audio saved" replaces "(no
+      transcript yet)" everywhere an entry has no transcript text. The old
+      copy implied it was still coming; for Web Speech (no way to
+      transcribe a stored recording later, only a live mic stream) that
+      usually wasn't true.
+- [x] Haptic confirmation (`navigator.vibrate`) on save success/failure —
+      a second, glove-proof signal alongside the "Saved" label, for
+      someone who taps and pockets the phone without looking.
+- [x] `navigator.storage.persist()` requested at boot, with grant status
+      surfaced in Settings. iOS Safari evicts non-installed web-app
+      storage after roughly a week idle; this is a landmine the readiness
+      brief called "bigger than the quota question."
+- [x] Local diagnostics counters (recordings started/completed/failed,
+      sync attempts/failures) plus a "Something wrong? Export everything"
+      support path in Settings that bundles them into the existing ZIP
+      export. No telemetry, nothing leaves the device unless the user
+      taps export — the no-backend promise stays intact.
+
+Explicitly **not** done this pass, per Fable's own prioritization:
+- **Audio storage quota/eviction policy** — Fable called this overweighted
+  in the original brief for a 3-5 person, multi-week beta, and warned
+  against the auto-prune idea specifically: automatically deleting audio
+  is destructive-by-policy in a product whose defining invariant is
+  "never destroy a capture." Deferred; if it ever happens, pruning may
+  only touch audio already confirmed synced to the user's own storage.
+- **A real Whisper offline-retry queue** (upload stored audio once
+  connectivity returns) — genuinely useful and honestly the more complete
+  fix, but bigger than a pre-launch pass. Good Week 2/3 candidate now that
+  the immediate honesty problem (silent empty transcript) is fixed.
+- **iPhone/Safari testing, the phone-lifecycle gauntlet** (call
+  interruption, hours backgrounded, overnight restart, low battery), and
+  **one full manual recovery drill** (clear site data → reinstall →
+  restore from sync + ZIP) — all require physical devices and human
+  hands. Not something to fake with headless Chromium; see human action
+  items below.
+
+## Human action items before field testers start (not code)
+
+Per Fable's memo — these are process, not engineering, and they're gating:
+
+1. **Device census.** One text to each tester: what phone, what browser?
+   Determines whether the iPhone/Safari risk is live or moot before
+   anyone hits the wall.
+2. **A hands-on setup session per tester.** A project human installs the
+   PWA to the home screen (not just a bookmark — this is what actually
+   grants persistent storage on iOS), configures cloud sync, watches the
+   first entry land in the tester's own Drive/R2/Oracle account, and
+   demonstrates ZIP export. Nobody leaves the dock unsynced — the default
+   state of an un-onboarded tester is local-only storage with maximum
+   data-loss exposure, precisely during the window meant to build trust.
+3. **Ask every tester to keep their current logging method running in
+   parallel for week one** — paper, memory, whatever they already do.
+   This produces ground truth for both transcript accuracy and capture
+   completeness, and means a DeckBoss failure costs the tester nothing.
+   Asking someone to bet real records on an unvalidated beta would be
+   irresponsible; this removes that problem.
+4. **One specific daily ask, nothing scripted otherwise**: at least once a
+   day, record during genuinely loud operating conditions — engine
+   running, wind, gloves on. That's the core hypothesis of the whole
+   product getting its first real test.
+5. **A five-minute daily check-in by call or text, not a form.** A
+   fisherman will mention "the thing ate my note Tuesday" in
+   conversation and never file that anywhere on their own.
+6. **Don't coach, and don't pitch features.** First contact with the app
+   naive is a nonrenewable resource — no pre-teaching vocabulary, no
+   hovering, no Spot Memory or Ask-Your-Log conversations in week one.
+   Watch for the moments they *don't* reach for the phone (mid-week
+   abandonment, "I stopped when my hands were wet") — that's the
+   highest-grade signal available, and it only shows up unobserved.
+
 ## Next 2-4 weeks
 
 **Week 1 (this pass):**

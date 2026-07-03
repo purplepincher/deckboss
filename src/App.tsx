@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { HashRouter, Routes, Route, NavLink } from "react-router-dom";
 import { useDeckBossStore } from "./state/store";
 import { verifyStoreIntegrity } from "./core/storage/local-db";
+import { requestPersistentStorage } from "./core/storage/persistence";
 import { OfflineBanner } from "./ui/screens/OfflineBanner";
 import { RecordScreen } from "./ui/screens/RecordScreen";
 import { TimelineScreen } from "./ui/screens/TimelineScreen";
@@ -23,6 +24,10 @@ export function App() {
   const [boot, setBoot] = useState<BootState>({ status: "checking" });
 
   useEffect(() => {
+    // Fire-and-forget: a "no" here doesn't block boot (it's best-effort and
+    // the browser gets to say no), but we want to have asked as early as
+    // possible in the origin's lifetime.
+    void requestPersistentStorage();
     void verifyStoreIntegrity().then((result) => {
       setBoot(result.ok ? { status: "ok" } : { status: "failed", stores: result.failedStores });
     });

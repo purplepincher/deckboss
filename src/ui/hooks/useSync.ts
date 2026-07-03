@@ -3,6 +3,7 @@ import { syncNow } from "../../core/sync/sync-engine";
 import { pendingJobCount, failedJobCount } from "../../core/sync/queue";
 import { useOfflineStatus } from "./useOfflineStatus";
 import type { SyncStatus } from "../../core/sync/types";
+import { recordSyncAttempt, recordSyncFailure } from "../../core/diagnostics";
 
 /**
  * OfflineBanner and SettingsScreen both read this. §10.3's four states map
@@ -27,12 +28,14 @@ export function useSync() {
       return;
     }
     setStatus("syncing");
+    void recordSyncAttempt();
     try {
       await syncNow();
       setLastSyncAt(new Date().toISOString());
       setStatus("online");
     } catch {
       setStatus("error");
+      void recordSyncFailure();
     } finally {
       await refreshCounts();
     }

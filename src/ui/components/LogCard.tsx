@@ -10,7 +10,11 @@ const CHIP_CLASS: Partial<Record<EntityType, string>> = {
 };
 
 export function LogCard({ entry, relative = true }: { entry: EffectiveLogEntry; relative?: boolean }) {
-  const preview = entry.transcript?.text?.slice(0, 80) ?? "(no transcript yet)";
+  // "No transcript yet" implies it's still coming — for the default Web
+  // Speech engine that's usually not true (it only transcribes live, there's
+  // no retry-later path once the recording stops), so the empty state has
+  // to be honest: the audio is safe, there just isn't text for it.
+  const preview = entry.transcript?.text?.slice(0, 80) || "No transcript — audio saved";
 
   return (
     <Link to={`/entry/${entry.id}`} className={`log-card ${entry.retracted ? "retracted" : ""}`}>

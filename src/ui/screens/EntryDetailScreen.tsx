@@ -66,7 +66,7 @@ export function EntryDetailScreen() {
       )}
 
       <div className="entry-detail-transcript">
-        {effective.transcript?.text || "(no transcript)"}
+        {effective.transcript?.text || "No transcript — audio saved. Play it back below."}
       </div>
 
       <AudioWaveform blob={audioBlob} />

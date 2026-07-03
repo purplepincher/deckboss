@@ -67,6 +67,21 @@ export class WebSpeechTranscriber {
   private confidences: number[] = [];
   private active = false;
   private language = "en-US";
+  private _hadNetworkError = false;
+
+  /**
+   * True if recognition ever reported a "network" error during this
+   * session — i.e. Chrome tried to ship audio to a cloud recognition
+   * service and couldn't reach it. This is the common case at sea: most
+   * browsers' Web Speech implementation is network-backed, not on-device,
+   * so "no signal" and "no transcript" are the same failure. Distinct from
+   * "no-speech" (genuine silence, benign) — only "network" sets this.
+   * Checked by useRecording.ts's stop() to decide whether an empty result
+   * means "you didn't say anything" or "we couldn't even try."
+   */
+  get hadNetworkError(): boolean {
+    return this._hadNetworkError;
+  }
 
   start(language = "en-US"): void {
     const Ctor = getSpeechRecognitionCtor();
@@ -76,6 +91,7 @@ export class WebSpeechTranscriber {
     this.confidences = [];
     this.active = true;
     this.language = language;
+    this._hadNetworkError = false;
 
     this.recognition = new Ctor();
     this.recognition.continuous = true;
@@ -98,8 +114,13 @@ export class WebSpeechTranscriber {
     this.recognition.onend = () => {
       if (this.active) this.recognition?.start();
     };
-    this.recognition.onerror = () => {
-      // Transient errors (no-speech, network blip) — onend will restart us.
+    this.recognition.onerror = (ev: SpeechRecognitionErrorEvent) => {
+      // "no-speech"/"aborted" are benign — onend restarts us, an empty
+      // result honestly means "nothing was said." "network" is not benign:
+      // most browsers' Web Speech is a cloud service, not on-device, so
+      // this is what happens with zero bars — the common case at sea, not
+      // an edge case. Flag it so stop() can tell the difference.
+      if (ev.error === "network") this._hadNetworkError = true;
     };
 
     this.recognition.start();
