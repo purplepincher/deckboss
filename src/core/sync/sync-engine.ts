@@ -207,30 +207,51 @@ async function refreshManifest(): Promise<void> {
  * lost) that the retention-policy work in ROADMAP.md is meant to prevent
  * from happening in the first place.
  */
+// A stress-test pass found that two overlapping calls can both read the
+// same "nothing pending yet" snapshot of allSyncJobs() before either one
+// enqueues, so both decide independently to requeue the same entry —
+// duplicate (harmless but wasteful) upload_audio jobs. Unreachable through
+// any call path today (syncNow()'s own inFlight guard means this is only
+// ever invoked once at a time), but this exact codebase has already
+// demonstrated, more than once this session, that "unreachable today"
+// reliably becomes a live bug the next time something else changes — so
+// the same inFlight-promise pattern syncNow() uses gets applied here too,
+// rather than leaving this as a footgun for whoever adds the next call
+// path (a "sync audio only" button, a retry-audio action, etc).
+let reconcileInFlight: Promise<{ requeued: number }> | null = null;
+
 export async function reconcileAudio(): Promise<{ requeued: number }> {
-  const [local, jobs] = await Promise.all([allEntries(), allSyncJobs()]);
-  const pendingAudioEntryIds = new Set(
-    jobs
-      .map((j) => j.payload)
-      .filter((p): p is Extract<SyncJob["payload"], { type: "upload_audio" }> => p.type === "upload_audio")
-      .map((p) => p.entryId),
-  );
+  if (reconcileInFlight) return reconcileInFlight;
+  reconcileInFlight = (async () => {
+    const [local, jobs] = await Promise.all([allEntries(), allSyncJobs()]);
+    const pendingAudioEntryIds = new Set(
+      jobs
+        .map((j) => j.payload)
+        .filter((p): p is Extract<SyncJob["payload"], { type: "upload_audio" }> => p.type === "upload_audio")
+        .map((p) => p.entryId),
+    );
 
-  let requeued = 0;
-  for (const entry of local) {
-    if (!entry.audio) continue; // never had audio
-    if (pendingAudioEntryIds.has(entry.id)) continue; // already queued — don't duplicate
+    let requeued = 0;
+    for (const entry of local) {
+      if (!entry.audio) continue; // never had audio
+      if (pendingAudioEntryIds.has(entry.id)) continue; // already queued — don't duplicate
 
-    const verifiedAt = await getAudioVerifiedAt(entry.id);
-    if (verifiedAt) continue; // already confirmed archived
+      const verifiedAt = await getAudioVerifiedAt(entry.id);
+      if (verifiedAt) continue; // already confirmed archived
 
-    const blob = await getAudioBlob(entry.id);
-    if (!blob) continue; // nothing locally left to re-upload
+      const blob = await getAudioBlob(entry.id);
+      if (!blob) continue; // nothing locally left to re-upload
 
-    await enqueueAudioForSync(entry.id, blob);
-    requeued++;
+      await enqueueAudioForSync(entry.id, blob);
+      requeued++;
+    }
+    return { requeued };
+  })();
+  try {
+    return await reconcileInFlight;
+  } finally {
+    reconcileInFlight = null;
   }
-  return { requeued };
 }
 
 async function getActiveAdapter(): Promise<StorageAdapter | null> {

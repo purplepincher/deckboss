@@ -188,6 +188,28 @@ describe("reconcileAudio", () => {
     expect(jobs.filter((j) => j.payload.type === "upload_audio" && j.payload.entryId === entry.id)).toHaveLength(1);
   });
 
+  it("does not double-enqueue when called concurrently — a stress-test found the un-guarded version does", async () => {
+    // Reproduces the exact race an adversarial stress-test pass found: two
+    // overlapping reconcileAudio() calls both read the same "nothing
+    // pending yet" snapshot before either enqueues, so both independently
+    // decide the same entry needs a job. Unreachable through any call path
+    // today (syncNow()'s inFlight guard means this only ever runs one at a
+    // time) but worth locking in as a real guarantee rather than an
+    // accident of how it's currently called.
+    const entry = entryWithAudio();
+    await putEntry(entry);
+    await putAudioBlob(entry.id, new Blob(["audio"], { type: "audio/webm" }));
+
+    const [first, second] = await Promise.all([reconcileAudio(), reconcileAudio()]);
+    // The second call joins the first's in-flight promise rather than
+    // starting its own pass, so both resolve to the identical result.
+    expect(first).toBe(second);
+    expect(first.requeued).toBe(1);
+
+    const jobs = await allSyncJobs();
+    expect(jobs.filter((j) => j.payload.type === "upload_audio" && j.payload.entryId === entry.id)).toHaveLength(1);
+  });
+
   it("does not attempt anything for audio that's already gone locally", async () => {
     const entry = entryWithAudio();
     await putEntry(entry);
