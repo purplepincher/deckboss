@@ -20,6 +20,20 @@ const IMMUTABLE_FIELDS = [
   "tags",
 ] as const satisfies readonly (keyof LogEntry)[];
 
+// Compile-time guard against this exact class of bug recurring: this list
+// silently drifted out of sync with LogEntry once already (transcript/
+// entities/tags were added to the schema without being added here, so
+// direct mutations of them went uncaught for a while). If a future field
+// gets added to LogEntry and forgotten here, _MissingImmutableKeys stops
+// being `never`, and assigning `true` to a variable typed `false` fails to
+// compile — a build break instead of a silent gap. `corrections` is
+// deliberately excluded: it has its own append-only check below, not
+// equality.
+type _NonCorrectionKeys = Exclude<keyof LogEntry, "corrections">;
+type _MissingImmutableKeys = Exclude<_NonCorrectionKeys, (typeof IMMUTABLE_FIELDS)[number]>;
+const _assertImmutableCoverage: _MissingImmutableKeys extends never ? true : false = true;
+void _assertImmutableCoverage; // exists only for the type constraint above, never read at runtime
+
 /**
  * Enforces the one rule this product's trustworthiness rests on: a
  * committed entry is never mutated, only appended to. Called from
