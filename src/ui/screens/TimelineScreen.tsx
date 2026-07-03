@@ -20,23 +20,34 @@ function dateRangeToDates(range: SearchFilters["dateRange"]): { startDate?: Date
   return {};
 }
 
+// Exported (pure, no React) so the filters->QueryParams mapping — in
+// particular that "Show retracted" actually flips `includeRetracted` — can
+// be unit tested without a component-rendering harness, matching how the
+// rest of this codebase tests logic (see tests/unit/*.test.ts).
+export function filtersToQueryParams(filters: SearchFilters, limit: number): QueryParams {
+  const { startDate } = dateRangeToDates(filters.dateRange);
+  return {
+    text: filters.text || undefined,
+    startDate,
+    entities: filters.entityType === "all" ? undefined : [filters.entityType],
+    includeRetracted: filters.showRetracted,
+    limit,
+  };
+}
+
 export function TimelineScreen() {
   const [filters, setFilters] = useState<SearchFilters>({
     text: "",
     dateRange: "all",
     entityType: "all",
+    showRetracted: false,
   });
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
-  const params: QueryParams = useMemo(() => {
-    const { startDate } = dateRangeToDates(filters.dateRange);
-    return {
-      text: filters.text || undefined,
-      startDate,
-      entities: filters.entityType === "all" ? undefined : [filters.entityType],
-      limit: visibleCount,
-    };
-  }, [filters, visibleCount]);
+  const params: QueryParams = useMemo(
+    () => filtersToQueryParams(filters, visibleCount),
+    [filters, visibleCount],
+  );
 
   const { results, loading } = useTensorLog(params);
 

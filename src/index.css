@@ -295,6 +295,13 @@ textarea {
 .search-filters select {
   flex: 1;
 }
+.search-retracted-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
 
 /* Settings */
 .settings-section {
