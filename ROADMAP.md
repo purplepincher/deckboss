@@ -286,10 +286,110 @@ missing guard against overlapping `syncNow()` calls — the latter two were
 previously unreachable because sync silently never ran, and became live
 risks the moment the adapter bug was fixed.
 
-**Not yet fixed, real finding**: `EntryDetailScreen.tsx` bypasses the
-store/hook layer and hand-mutates raw `LogEntry.corrections`, found
-independently by two of three code reviewers (the third simply didn't
-have that file in its context — see the synthesis doc for why that's a
-methodology note, not a real disagreement). Worth a follow-up: add
-`amendEntry`/`retractEntry` actions to the store so the write path is as
-clean as the read path already is.
+~~**Not yet fixed, real finding**: `EntryDetailScreen.tsx` bypasses the
+store/hook layer...~~ — **fixed** in a follow-up round: the store now
+exposes `amendEntry`/`retractEntry`, `EntryDetailScreen` and
+`SettingsScreen` no longer import `core/*` directly, and a `useStorage`
+hook contains the one deliberate exception (Google Drive's OAuth popup
+has to fire synchronously with the click). See git history around
+"Merge claude/write-path-fix".
+
+## Follow-up round: schema-pattern debate, an invariant gap, and a Fable-driven audio policy
+
+Three more small rounds after the above, closing out the round-table
+backlog and then finding something new in the process of doing so.
+
+**Schema pattern debate: resolved as "keep as-is."** aider's proposed
+strict-schema/wire-schema split for `log-entry.ts` was independently
+re-evaluated (kimi, given the specific question rather than a broad
+review) and rejected: the two-schema version doesn't solve a problem the
+current pattern doesn't already solve, and it introduces a real risk —
+someone importing the strict schema by habit and having a forward-
+compatible field wrongly rejected. Every actual parsing call site was
+checked. No code changed.
+
+**A real, confirmed gap in the write-path invariant, found while
+producing the Fable design doc**: `invariants.ts`'s `IMMUTABLE_FIELDS`
+was missing `transcript`, `entities`, and `tags` — meaning the one rule
+this product's trust rests on didn't actually protect those three fields
+from direct mutation, only the schema's other seven. Fixed, with
+regression tests proving the gap existed and is now closed. A follow-up
+audit (aider) confirmed full coverage after the fix and that no write
+path bypasses `putEntry()`, then proposed and verified (temporarily broke
+it, confirmed a real compile error, reverted) a compile-time guard so
+this specific class of bug — a manually-maintained list silently drifting
+out of sync with the schema — can't recur silently next time a field gets
+added to `LogEntry`.
+
+**`docs/DESIGN_transcript_as_event.md`** fleshed out Fable's "transcript
+as an additive event" idea into a real spec. Its finding: the narrow
+slice (an `author` field on corrections) is worth banking; the full
+feature is contingent on two things that don't exist — a re-transcribe
+feature and an actual audio retention policy.
+
+**That policy question got asked of a fresh Fable instance** (the prompt
+itself workshopped by kimi, reviewing the design doc and this roadmap to
+pick the sharpest next question — see the "prompt architect" pattern this
+represents, worth reusing). Fable's recommendation, adopted:
+
+- **The user's cloud storage is the canonical archive; the phone is a
+  cache and an outbox.** Audio is never deleted locally unless a copy is
+  *verified* elsewhere (read-back confirmed, not just "the upload call
+  didn't throw") — and even then, only under actual storage pressure
+  (~75% of quota), oldest-verified-first, never on a timer. Below
+  pressure, audio stays local forever. This is connectivity-honest: weeks
+  offline just means nothing is eviction-eligible yet, no rule needs to
+  know about coverage.
+- Evicted audio is re-fetchable from the archive on demand — this is what
+  makes "audio can be reinterpreted later" true without requiring
+  infinite local retention, and it's required anyway for the already-real
+  case of a second device pulling an entry's Markdown without its audio.
+- When storage fills and nothing is verified (no sync configured, weeks
+  offline): warn loudly and early, keep recording until the platform
+  actually refuses, and Settings should say plainly that DeckBoss without
+  configured sync has a real, device-dependent season ceiling.
+- The `author`-field schema slice should ship independently of the full
+  policy/eviction machinery — but not the week real field testers start,
+  to avoid schema-version churn crossing the sync boundary during the
+  beta. Land it alongside the `EntryDetailScreen`/`SettingsScreen`
+  cleanup, the next natural "already touching entry-builder.ts" moment.
+- Fable's biggest self-flagged risk: this policy stakes everything on
+  trusting the sync layer's own "verified" signal, and the sync layer is
+  the component with the worst track record in this codebase this
+  session. Mitigation: read-back verification (not write-success),
+  pressure-only triggering (keeps eviction rare, so a verification bug
+  has a small blast radius), and a floor — never evict audio younger than
+  30 days regardless of verification status. Not yet implemented; noted
+  here so it isn't lost when the eviction machinery itself gets built.
+
+**While verifying Fable's memo against the actual code, found and fixed
+a second real, live bug it surfaced as an aside — arguably more urgent
+than the policy question itself**: `sync-engine.ts`'s `upload_audio` job
+handler returned normally (not throwing) when a local blob was missing,
+which `queue.ts`'s `processQueue()` treats as *success* — the job gets
+deleted. Browser-evicted audio wasn't just losing the local copy; it was
+silently cancelling the very upload that would have saved it, with the
+job vanishing and no trace anywhere that the audio was never archived.
+Fixed: the handler now throws, so a missing blob becomes a visible,
+retried, eventually-surfaced sync error instead of silent permanent loss.
+One regression test.
+
+**Also shipped**: a storage meter in Settings → Support
+(`audioStorageBytes()` existed with no UI before this — now shown
+alongside `navigator.storage.estimate()`'s quota when the browser reports
+one, with a plain-language warning past ~75% usage). This is visibility
+only, not the eviction policy itself.
+
+**Explicitly not yet done** — Fable's other pre-beta recommendations,
+real and still open:
+- Verified-upload confirmation (a read-back check after `writeBlob`
+  succeeds, not just trusting the write call didn't throw) — the
+  "verified" concept the whole policy above depends on doesn't actually
+  exist in code yet.
+- An audio reconciliation pass in `syncNow()` that notices archive-
+  missing audio for entries that look synced and re-queues it — today,
+  audio gets exactly one sync job at capture time and nothing ever
+  double-checks it later.
+- The actual eviction machinery (oldest-verified-first deletion under
+  pressure) — deliberately deferred until real field usage shows someone
+  actually approaching quota, which the new storage meter will surface.

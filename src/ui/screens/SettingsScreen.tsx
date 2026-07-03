@@ -3,7 +3,9 @@ import { useDeckBossStore } from "../../state/store";
 import { useStorage } from "../hooks/useStorage";
 import type { StorageBackendId } from "../../core/storage/interface";
 import { getDiagnostics, type Diagnostics } from "../../core/diagnostics";
-import { isStoragePersisted } from "../../core/storage/persistence";
+import { isStoragePersisted, getStorageEstimate, type StorageEstimate } from "../../core/storage/persistence";
+import { audioStorageBytes } from "../../core/storage/local-db";
+import { formatBytes } from "../../utils/file";
 
 const BACKENDS: { id: StorageBackendId; label: string }[] = [
   { id: "google-drive", label: "Google Drive" },
@@ -21,6 +23,8 @@ export function SettingsScreen() {
   const [busy, setBusy] = useState<string | null>(null);
   const [diagnostics, setDiagnostics] = useState<Diagnostics | null>(null);
   const [persisted, setPersisted] = useState<boolean | null>(null);
+  const [audioBytes, setAudioBytes] = useState<number | null>(null);
+  const [storageEstimate, setStorageEstimate] = useState<StorageEstimate | null>(null);
   // Which S3-compatible backend's credential form is open, if any — replaces
   // sequential prompt() dialogs (a security review flagged those as
   // unmasked and potentially visible in autofill/history; low risk since
@@ -40,6 +44,8 @@ export function SettingsScreen() {
   useEffect(() => {
     void getDiagnostics().then(setDiagnostics);
     void isStoragePersisted().then(setPersisted);
+    void audioStorageBytes().then(setAudioBytes);
+    void getStorageEstimate().then(setStorageEstimate);
   }, []);
 
   const connect = async (id: StorageBackendId) => {
@@ -257,6 +263,19 @@ export function SettingsScreen() {
           Storage: {persisted === null ? "checking…" : persisted ? "persistent ✓" : "not persistent ⚠"}
           {persisted === false && " — install this app to your home screen to protect it from being cleared."}
         </p>
+        {audioBytes !== null && (
+          <p style={{ fontSize: 12, opacity: 0.5, marginTop: 4 }}>
+            Audio on this device: {formatBytes(audioBytes)}
+            {storageEstimate?.quotaBytes ? (
+              <>
+                {" "}
+                of ~{formatBytes(storageEstimate.quotaBytes)} available
+                {storageEstimate.usageBytes / storageEstimate.quotaBytes > 0.75 &&
+                  " — getting full. Sync or export a backup soon."}
+              </>
+            ) : null}
+          </p>
+        )}
       </div>
 
       <div className="settings-section">

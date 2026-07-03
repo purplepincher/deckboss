@@ -28,3 +28,26 @@ export async function isStoragePersisted(): Promise<boolean> {
     return false;
   }
 }
+
+export interface StorageEstimate {
+  usageBytes: number;
+  quotaBytes: number | null; // null when the browser won't report one
+}
+
+/**
+ * `audioStorageBytes()` (local-db.ts) existed with no UI surfacing it —
+ * flagged in a Fable strategic review as a real pre-beta gap: a fisherman
+ * has no way to see local storage filling up before the browser starts
+ * refusing new recordings. `navigator.storage.estimate()` is the browser's
+ * own quota accounting, best-effort and not universally supported, so this
+ * degrades to "usage only, no quota" rather than throwing.
+ */
+export async function getStorageEstimate(): Promise<StorageEstimate | null> {
+  if (!navigator.storage?.estimate) return null;
+  try {
+    const { usage, quota } = await navigator.storage.estimate();
+    return { usageBytes: usage ?? 0, quotaBytes: quota ?? null };
+  } catch {
+    return null;
+  }
+}

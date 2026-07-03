@@ -65,7 +65,20 @@ async function handleJob(job: SyncJob, adapter: StorageAdapter): Promise<void> {
     }
     case "upload_audio": {
       const blob = await getAudioBlob(job.payload.entryId);
-      if (!blob) return;
+      if (!blob) {
+        // Confirmed by a Fable strategic review, verified against this
+        // exact code: silently returning here made processQueue() treat a
+        // missing blob as SUCCESS (see queue.ts — no throw means the job
+        // gets deleted). That's backwards for the one case this matters
+        // most: browser-evicted audio. Eviction doesn't just lose the
+        // local copy — it was silently cancelling the very upload that
+        // would have saved it, with the job vanishing and nothing ever
+        // surfacing that the audio was never archived. Throwing here
+        // instead means the job exhausts its retries and shows up in
+        // Settings → Support's sync-error count — an honest, visible
+        // failure instead of a silent, permanent one.
+        throw new Error(`Audio for entry ${job.payload.entryId} is missing locally — cannot upload.`);
+      }
       await adapter.writeBlob(job.payload.audioPath, blob);
       return;
     }
