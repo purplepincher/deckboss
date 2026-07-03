@@ -411,3 +411,126 @@ only, not the eviction policy itself.
 (oldest-verified-first deletion under storage pressure) — deferred until
 real field usage shows someone actually approaching quota, which the
 storage meter shipped earlier this round will surface.
+
+## The restore drill (Fable Phase 2 plan §5, A1) — first run, against LocalZipAdapter
+
+The one promise this whole architecture depends on and nobody had
+exercised end-to-end: fresh device, zero local state, pointed at an
+already-populated archive, recovers everything. Run as an adversarial
+agent round against `LocalZipAdapter` (see
+`tests/unit/restore-drill.test.ts`), driven entirely through the real
+call paths (`buildEntry`/`buildAmendCorrection`/`buildRetractCorrection`,
+`putEntry`, `enqueueEntryForSync`/`enqueueAudioForSync`,
+`pushAllLocalEntries`/`pullRemoteEntries`/`syncNow`) — never a hand-rolled
+shortcut. "Device A" and "device B" are two independently wiped local
+IndexedDB states resolving to the *same* adapter instance, the one thing
+that's genuinely shared in real life.
+
+**Verdict: text recovers correctly; audio does not rehydrate locally on
+its own; one real, severe, silent data-loss bug was found and fixed.**
+
+- **Entries, corrections, retraction, legacy-shape transcripts — all
+  recover byte-for-byte.** Multi-correction entries (human + model
+  authors, mixed order), retracted entries (still present, still marked
+  retracted, not dropped), and legacy-shape entries (transcript set
+  directly on the base record, no correction) all fold identically via
+  `applyCorrections()` on the fresh device. No gap found here.
+- **CONFIRMED AND FIXED — the actually dangerous bug: a fresh device's
+  first sync could silently destroy the archive's manifest.**
+  `syncNow()` runs `pushAllLocalEntries()` (which calls
+  `refreshManifest()`) before `pullRemoteEntries()`. `refreshManifest()`
+  already had a try/catch around `adapter.getManifest()` to tolerate "no
+  manifest yet" — but that catch doesn't distinguish "doesn't exist" from
+  "exists but is corrupted/unreadable" (a real, reproducible condition —
+  a partial/interrupted write on any real backend). A device with zero
+  local entries (exactly what a freshly recovering device is, on its
+  very first sync, before the pull has run) that hit this catch fell
+  through to writing an *empty* manifest back over the real one — not a
+  crash, a silent, valid-looking success (`{ pushed: 0, pulled: 0 }`)
+  that permanently erased the only index the archive's actual files were
+  discoverable through. The `.md`/audio files themselves were never
+  touched; they just became unreachable. Reproduced directly, fixed in
+  `refreshManifest()` (`sync-engine.ts`): a device with nothing local to
+  contribute now skips the manifest write entirely when the remote read
+  fails, rather than guessing the remote is empty. Regression test added
+  (`restore-drill.test.ts`, "corrupted manifest.json" — confirmed
+  red/green: fails without the fix, passes with it). This is the single
+  most important finding of this drill; it directly falsifies "pointing a
+  fresh device at the same storage recovers everything" for the exact
+  condition (any transient manifest corruption) it's supposed to survive.
+- **NOT FIXED, real gap, needs a product decision — audio does not come
+  back locally on its own.** The archive-level promise holds: every
+  audio blob that was uploaded and verified is genuinely re-fetchable via
+  `adapter.readBlob()` — the bytes are never lost. But there is currently
+  no code path anywhere in `src/` that ever calls `readBlob()` to restore
+  a local copy. `useAudioBlob.ts` reads local IndexedDB only, with no
+  remote fallback; `pullRemoteEntries()`/`syncNow()` never touch audio at
+  all. This means the "evicted audio is re-fetchable from the archive on
+  demand" clause of the audio-retention policy above is a decision that
+  was made but never implemented — a user recovering on a fresh device
+  gets every entry's text back perfectly, and a "play" control that leads
+  nowhere for every one of them. Needs a real design pass (automatic
+  background rehydration vs. an explicit "download audio" action vs.
+  stream-on-play — each has different cost/UX tradeoffs), not a guess.
+- **NOT FIXED, reported — a stale/incomplete manifest is a real,
+  unmitigated single point of failure for the whole archive-recovery
+  promise.** `pullRemoteEntries()` only ever iterates `manifest.entries`
+  — there's no `listFiles()`-based fallback scan. A file that's
+  physically present in storage but missing from the manifest (a
+  real-backend race: entry upload succeeds, manifest write fails) is
+  permanently invisible to every device's pull, forever, until some
+  device's *push* happens to reference it. The manifest-union fix found
+  earlier this session (`refreshManifest()`) only helps a device that has
+  local entries to contribute — a freshly recovering device never does,
+  so that fix doesn't apply to the exact scenario this drill is about. A
+  real fix needs a directory-scan fallback across every adapter (all
+  three already promise "recursive" `listFiles()` per the
+  `StorageAdapter` contract, but that's unverified for
+  `GoogleDriveAdapter`/`S3CompatibleAdapter` here), with real cost
+  implications (scanning the whole folder on every cold pull) — a
+  deliberate decision, not a guess.
+- **Smaller, confirmed-safe finding, not fixed:** a manifest entry whose
+  underlying file has gone missing/corrupted is skipped gracefully by
+  `pullRemoteEntries()` (matches its own stated contract) — but silently,
+  with zero visibility into what got skipped or how many entries. Worth a
+  return-value/diagnostics improvement at some point; not a data-loss bug
+  on its own.
+- **Adversarial, not a bug:** two manifest entries resolving to the same
+  entry id with different content (shouldn't be possible given UUIDv4)
+  does not throw and does not corrupt the rest of the pull —
+  `mergeEntries()` already spreads the first-processed version's fields
+  unconditionally for anything that isn't `corrections`, so the second
+  file's differing base fields are silently discarded with no trace.
+  Matches `conflict-resolver.ts`'s already-documented assumption that
+  core fields are identical across devices for the same id; recorded as
+  known behavior, not changed.
+- **Testing-infrastructure finding, adjacent but real:** under this
+  project's Vitest config (`environment: "jsdom"`), storing a `Blob`
+  through `idb-keyval`/`fake-indexeddb` and reading it back produced an
+  empty, sizeless, typeless object, not a real `Blob` — jsdom's own
+  `Blob` class isn't recognized by Node's global `structuredClone()`,
+  which `fake-indexeddb` uses internally per spec. Every existing test in
+  this suite that round-trips audio through IndexedDB (the upload-
+  verification and reconciliation tests) was passing "for the wrong
+  reason," comparing two equally-corrupted `undefined` values rather than
+  real byte sizes. Fixed for the whole suite by swapping `globalThis.Blob`
+  for Node's own (structuredClone-compatible) `Blob` in `tests/setup.ts`
+  — no production code changed, full suite re-verified green with the
+  swap in place, no regressions.
+
+**Gates boat 1 per the Phase 2 plan, together with the device census and
+the human phone drill — status: not yet clear to proceed.** The
+manifest-destruction bug is fixed and verified; the audio-rehydration gap
+is not fixed and is a real, user-visible break of the retention policy's
+central promise on a phone that's actually lost data. The human phone
+drill (real backend, real device) still needs to run; this agent round
+only covers `LocalZipAdapter`. A real S3-compatible/Google Drive run
+would need the same shape (device A populates + syncs, device B — fresh
+credentials, same bucket/folder, empty local state — recovers) plus
+backend-specific adversarial cases this drill couldn't reach from
+`LocalZipAdapter` alone: `GoogleDriveAdapter.listFiles()`'s documented
+prefix-ignoring quirk interacting with manifest discovery, real OAuth
+token expiry mid-recovery, and S3/R2 eventual-consistency windows where a
+just-written manifest or object isn't immediately visible to a
+follow-up read (a class of flake this in-memory adapter can't produce
+since every write is immediately and consistently visible).

@@ -212,13 +212,33 @@ async function refreshManifest(): Promise<void> {
   // other way to discover them. Two devices sharing one bucket could
   // each silently un-list the other's uploads on every sync.
   let remoteFiles: FileMetadata[] = [];
+  let remoteReadFailed = false;
   try {
     remoteFiles = (await adapter.getManifest()).entries;
   } catch {
     // no existing manifest yet (first sync ever, or backend that throws
     // on a missing file rather than returning empty) — local-only is
     // correct in that case, nothing to union with.
+    remoteReadFailed = true;
   }
+
+  // The restore drill (docs/FABLE_PHASE2_PLAN.md §5, A1) found this
+  // silently destructive: a device with nothing local to push (the exact
+  // situation a freshly recovering device is in on its very first sync,
+  // before pullRemoteEntries() has run) that hits this catch — e.g. a
+  // corrupted/partially-written manifest.json, a real and reproducible
+  // condition on a real backend, not just "first sync ever" — would fall
+  // through to the union below with remoteFiles=[] and localFiles=[],
+  // then WRITE that empty manifest back, permanently erasing the only
+  // index the archive's actual .md/audio files were discoverable through.
+  // The files themselves survive; they just become unreachable, and
+  // "pointing a fresh device at the same cloud storage recovers
+  // everything" silently stops being true. A device that has nothing to
+  // contribute has no safe basis for deciding the remote is genuinely
+  // empty rather than momentarily unreadable, so it must not write
+  // anything in that case — leave whatever's actually there (readable or
+  // not) untouched instead of guessing.
+  if (remoteReadFailed && localFiles.length === 0) return;
 
   const merged = new Map<string, FileMetadata>();
   for (const f of remoteFiles) merged.set(f.path, f);
