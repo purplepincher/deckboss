@@ -180,13 +180,33 @@ textarea {
   font-size: 16px;
   color: var(--text-muted);
 }
+/* "See all" navigation link from the Record screen. It was a bare
+   .record-instruction <a> — ~18px tall, far under the 44px touch-target
+   floor and especially bad for a gloved hand. Kept as a subtle text link
+   (not a full .btn) so this stays an ergonomics fix, not a visual
+   redesign; the hit area just has to be reachable. */
+.record-see-all {
+  display: inline-block;
+  min-height: 44px;
+  padding: 10px 16px;
+  line-height: 24px;
+  font-size: 13px;
+  color: var(--text-muted);
+  text-decoration: none;
+}
 .record-elapsed {
   font-variant-numeric: tabular-nums;
   font-size: 15px;
   color: var(--text-muted);
 }
 .record-error {
-  color: var(--accent);
+  /* The single most safety-relevant message on the water ("couldn't start
+     recording" / permission denied). #ff4444 on --bg measures ~5.3:1 — it
+     clears WCAG AA, but with no headroom for sunlight glare. The codebase
+     already created --accent-text (#ff6b6b, ~6.5:1) for exactly this case
+     (see :root), and the offline error banner already uses it; this should
+     match. */
+  color: var(--accent-text);
   font-size: 14px;
   max-width: 320px;
 }

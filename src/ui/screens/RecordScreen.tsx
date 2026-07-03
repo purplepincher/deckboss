@@ -33,7 +33,7 @@ export function RecordScreen() {
           {recent.map((e) => (
             <LogCard key={e.id} entry={e} />
           ))}
-          <Link to="/timeline" className="record-instruction" style={{ fontSize: 13 }}>
+          <Link to="/timeline" className="record-see-all">
             See all →
           </Link>
         </div>

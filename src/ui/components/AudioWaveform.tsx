@@ -45,6 +45,7 @@ export function AudioWaveform({ blob }: { blob: Blob | null }) {
       </button>
       <input
         type="range"
+        aria-label="Playback position"
         min={0}
         max={playerRef.current?.duration || 1}
         step={0.1}

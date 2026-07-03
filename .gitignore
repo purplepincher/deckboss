@@ -27,6 +27,9 @@ AIDER_TASK*.md
 AIDER_SUMMARY.md
 AIDER_CONFLICT_AUDIT_SUMMARY.md
 FABLE_NEXT_PROMPT.md
+GLM_TASK.md
+GLM_SUMMARY.md
 *-run.log
 *-audit.log
 *-audit-retry.log
+*.chat.history.md
