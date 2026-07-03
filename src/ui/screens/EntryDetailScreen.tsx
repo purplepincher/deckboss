@@ -1,9 +1,6 @@
-import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useDeckBossStore } from "../../state/store";
-import { buildAmendCorrection, buildRetractCorrection } from "../../core/tensor-log/entry-builder";
-import { getAudioBlob, getEntry } from "../../core/storage/local-db";
-import { enqueueEntryForSync } from "../../core/sync/sync-engine";
+import { useAudioBlob } from "../hooks/useAudioBlob";
 import { AudioWaveform } from "../components/AudioWaveform";
 import { GPSBadge } from "../components/GPSBadge";
 
@@ -11,15 +8,11 @@ export function EntryDetailScreen() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const entries = useDeckBossStore((s) => s.entries);
-  const saveEntry = useDeckBossStore((s) => s.saveEntry);
-  const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
+  const amendEntry = useDeckBossStore((s) => s.amendEntry);
+  const retractEntry = useDeckBossStore((s) => s.retractEntry);
+  const audioBlob = useAudioBlob(id);
 
   const effective = entries.find((e) => e.id === id) ?? null;
-
-  useEffect(() => {
-    if (!id) return;
-    void getAudioBlob(id).then((b) => setAudioBlob(b ?? null));
-  }, [id]);
 
   if (!effective || !id) {
     return (
@@ -29,23 +22,16 @@ export function EntryDetailScreen() {
     );
   }
 
-  // Corrections append to the *raw* stored entry, never the effective view —
-  // getEntry() re-reads the on-disk record fresh each time this runs.
+  // The raw entry + correction bookkeeping lives entirely in the store now
+  // (see amendEntry/retractEntry in state/store.ts) — this screen only ever
+  // touches the effective (corrections-applied) view.
   const amend = async (tags: string[]) => {
-    const raw = await getEntry(id);
-    if (!raw) return;
-    raw.corrections.push(buildAmendCorrection({ tags }));
-    await saveEntry(raw);
-    await enqueueEntryForSync(raw.id);
+    await amendEntry(id, { tags });
   };
 
   const retract = async () => {
     if (!confirm("Retract this entry? It stays in your log, marked as retracted — never deleted.")) return;
-    const raw = await getEntry(id);
-    if (!raw) return;
-    raw.corrections.push(buildRetractCorrection("removed via Entry Detail screen"));
-    await saveEntry(raw);
-    await enqueueEntryForSync(raw.id);
+    await retractEntry(id, "removed via Entry Detail screen");
     navigate("/timeline");
   };
 
