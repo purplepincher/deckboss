@@ -2,11 +2,11 @@ import { useCallback, useRef, useState } from "react";
 import { AudioRecorder, RecorderPermissionError } from "../../core/audio/recorder";
 import { getCurrentPosition, GeolocationError } from "../../services/geolocation";
 import { WebSpeechTranscriber, isWebSpeechSupported } from "../../services/webspeech";
-import { transcribeWithWhisper } from "../../services/whisper";
+import { transcribeWithWhisper, WhisperNetworkError } from "../../services/whisper";
 import { buildEntry } from "../../core/tensor-log/entry-builder";
 import { putAudioBlob } from "../../core/storage/local-db";
 import { useDeckBossStore } from "../../state/store";
-import { enqueueEntryForSync, enqueueAudioForSync } from "../../core/sync/sync-engine";
+import { enqueueEntryForSync, enqueueAudioForSync, enqueueWhisperRetry } from "../../core/sync/sync-engine";
 import type { GPSReading, TranscriptResult } from "../../core/types/log-entry";
 import { recordRecordingStarted, recordRecordingCompleted, recordRecordingFailed } from "../../core/diagnostics";
 import { vibrateSaved, vibrateFailed } from "../../utils/haptics";
@@ -116,6 +116,8 @@ export function useRecording() {
     if (transcript && transcript.text === "" && hadNetworkError) {
       transcript = undefined;
     }
+
+    let whisperNetworkFailed = false;
     if (config.transcription.engine === "whisper" && config.transcription.whisperApiKey) {
       try {
         transcript = await transcribeWithWhisper(
@@ -123,10 +125,19 @@ export function useRecording() {
           config.transcription.whisperApiKey,
           config.transcription.language,
         );
-      } catch {
-        // Whisper failed (network, quota, bad key) — fall back to whatever
-        // Web Speech caught live, if anything, rather than losing the note.
-        transcript = liveTranscript;
+      } catch (err) {
+        if (err instanceof WhisperNetworkError) {
+          // The network was unreachable — queue a retry so the stored audio
+          // gets transcribed once the device is back in cell range. Leave the
+          // live Web Speech result in place (usually empty/undefined in this
+          // situation) so the honest "audio saved" state still shows.
+          whisperNetworkFailed = true;
+        } else {
+          // Whisper failed for a non-network reason (bad key, quota, etc.) —
+          // fall back to whatever Web Speech caught live, if anything, rather
+          // than losing the note.
+          transcript = liveTranscript;
+        }
       }
     }
 
@@ -147,6 +158,10 @@ export function useRecording() {
       // dropping the entry).
       await saveEntry(entry);
       await enqueueEntryForSync(entry.id);
+
+      if (whisperNetworkFailed) {
+        await enqueueWhisperRetry(entry.id, config.transcription.language);
+      }
 
       if (entry.audio) {
         try {

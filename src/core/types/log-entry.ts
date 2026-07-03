@@ -191,6 +191,7 @@ export type EffectiveLogEntry = Omit<LogEntry, "corrections"> & {
   retracted: boolean;
   amended: boolean;
   lastCorrectionReason: string | null;
+  pendingTranscript?: "whisper_retry" | null;
 };
 
 export function newEntrySkeleton(params: {
