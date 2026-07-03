@@ -93,14 +93,22 @@ export const useDeckBossStore = create<DeckBossStore>((set, get) => ({
   amendEntry: async (id, fields, reason) => {
     const raw = await getEntry(id);
     if (!raw) return; // entry gone locally — nothing to amend, matches prior screen-level behavior
-    const next: LogEntry = { ...raw, corrections: [...raw.corrections, buildAmendCorrection(fields, reason)] };
+    const { config } = get();
+    const next: LogEntry = {
+      ...raw,
+      corrections: [...raw.corrections, buildAmendCorrection(fields, config.deviceId, reason)],
+    };
     await get().saveEntry(next);
     await enqueueEntryForSync(next.id);
   },
   retractEntry: async (id, reason) => {
     const raw = await getEntry(id);
     if (!raw) return; // entry gone locally — nothing to retract
-    const next: LogEntry = { ...raw, corrections: [...raw.corrections, buildRetractCorrection(reason)] };
+    const { config } = get();
+    const next: LogEntry = {
+      ...raw,
+      corrections: [...raw.corrections, buildRetractCorrection(config.deviceId, reason)],
+    };
     await get().saveEntry(next);
     await enqueueEntryForSync(next.id);
   },

@@ -140,6 +140,10 @@ export const CorrectionSchema = z.object({
   // this gets consumed (matches buildAmendCorrection/buildRetractCorrection's
   // own default for new corrections).
   author: CorrectionAuthorSchema.optional(),
+  // Optional, not required: a correction written before this field existed
+  // has no `deviceId` on disk. New corrections are stamped at creation time;
+  // absent means "created before device metadata was recorded."
+  deviceId: z.string().uuid().optional(),
   reason: z.string().optional(),
   fields: EditableFieldsSchema.optional(), // present for "amend", absent for "retract"
 });

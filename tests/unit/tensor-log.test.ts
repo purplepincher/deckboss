@@ -18,10 +18,12 @@ function mockGps() {
 }
 
 const TRANSCRIPT = { text: "Set twelve crab pots starboard rail eighty fathom", confidence: 0.94, language: "en", engine: "webspeech" as const };
+const DEVICE_ID = crypto.randomUUID();
 
 describe("entry-serializer <-> entry-parser round trip", () => {
   it("preserves a new-shape entry (transcript in corrections) through serialize -> parse", async () => {
     const entry = await buildEntry({
+      deviceId: DEVICE_ID,
       audioBlob: null,
       gps: mockGps(),
       transcript: TRANSCRIPT,
@@ -68,8 +70,8 @@ describe("entry-serializer <-> entry-parser round trip", () => {
       source: "text",
     });
     entry.transcript = { text: "original text", confidence: 0.8, language: "en", engine: "webspeech" };
-    entry.corrections.push(buildAmendCorrection({ tags: ["corrected"] }, "typo fix"));
-    entry.corrections.push(buildRetractCorrection("wrong vessel"));
+    entry.corrections.push(buildAmendCorrection({ tags: ["corrected"] }, DEVICE_ID, "typo fix"));
+    entry.corrections.push(buildRetractCorrection(DEVICE_ID, "wrong vessel"));
 
     const parsed = parseEntry(serializeEntry(entry));
     expect(parsed.corrections).toHaveLength(2);
@@ -87,6 +89,7 @@ describe("entry-serializer <-> entry-parser round trip", () => {
 
   it("renders the effective transcript in the Markdown body even when the base transcript is null", async () => {
     const entry = await buildEntry({
+      deviceId: DEVICE_ID,
       audioBlob: null,
       gps: null,
       transcript: TRANSCRIPT,
@@ -100,7 +103,8 @@ describe("entry-serializer <-> entry-parser round trip", () => {
 
 describe("buildEntry", () => {
   it("never blocks on missing GPS or transcript", async () => {
-    const entry = await buildEntry({ audioBlob: null, gps: null, source: "voice" });
+    const entry = await buildEntry({
+      deviceId: DEVICE_ID, audioBlob: null, gps: null, source: "voice" });
     expect(entry.gps).toBeNull();
     expect(entry.transcript).toBeNull();
     expect(entry.corrections).toHaveLength(0);
@@ -109,6 +113,7 @@ describe("buildEntry", () => {
 
   it("stores the first transcript as a model-authored correction instead of on the base record", async () => {
     const entry = await buildEntry({
+      deviceId: DEVICE_ID,
       audioBlob: null,
       gps: null,
       transcript: TRANSCRIPT,
@@ -132,6 +137,7 @@ describe("buildEntry", () => {
     // transcript" AND show an "edited" chip, despite never touching it.
     const emptyTranscript = { text: "", confidence: 0, language: "en", engine: "webspeech" as const };
     const entry = await buildEntry({
+      deviceId: DEVICE_ID,
       audioBlob: null,
       gps: null,
       transcript: emptyTranscript,
@@ -146,6 +152,7 @@ describe("buildEntry", () => {
 
   it("runs entity extraction when a transcript is provided", async () => {
     const entry = await buildEntry({
+      deviceId: DEVICE_ID,
       audioBlob: null,
       gps: null,
       transcript: { text: "twelve crab pots starboard rail eighty fathom", confidence: 0.9, language: "en", engine: "webspeech" },
@@ -156,24 +163,42 @@ describe("buildEntry", () => {
     expect(types).toContain("depth");
     expect(types).toContain("location_relative");
   });
+
+  it("stamps the deviceId on the model-authored transcript correction", async () => {
+    const entry = await buildEntry({
+      deviceId: DEVICE_ID,
+      audioBlob: null,
+      gps: null,
+      transcript: TRANSCRIPT,
+      source: "voice",
+    });
+
+    const correction = entry.corrections[0];
+    expect(correction?.deviceId).toBe(DEVICE_ID);
+    expect(correction?.author).toEqual({ kind: "model", engine: "webspeech" });
+  });
 });
 
 describe("buildAmendCorrection / buildRetractCorrection", () => {
   it("defaults author to human", () => {
-    const amend = buildAmendCorrection({ tags: ["x"] });
+    const amend = buildAmendCorrection({ tags: ["x"] }, DEVICE_ID);
     expect(amend.author).toEqual({ kind: "human" });
+    expect(amend.deviceId).toBe(DEVICE_ID);
 
-    const retract = buildRetractCorrection("bad entry");
+    const retract = buildRetractCorrection(DEVICE_ID, "bad entry");
     expect(retract.author).toEqual({ kind: "human" });
+    expect(retract.deviceId).toBe(DEVICE_ID);
   });
 
   it("accepts an explicit author", () => {
     const modelAuthor = { kind: "model" as const, engine: "whisper-1" as const };
-    const amend = buildAmendCorrection({ tags: ["x"] }, "auto-tagged", modelAuthor);
+    const amend = buildAmendCorrection({ tags: ["x"] }, DEVICE_ID, "auto-tagged", modelAuthor);
     expect(amend.author).toEqual(modelAuthor);
+    expect(amend.deviceId).toBe(DEVICE_ID);
 
-    const retract = buildRetractCorrection("model error", modelAuthor);
+    const retract = buildRetractCorrection(DEVICE_ID, "model error", modelAuthor);
     expect(retract.author).toEqual(modelAuthor);
+    expect(retract.deviceId).toBe(DEVICE_ID);
   });
 });
 
@@ -188,7 +213,7 @@ describe("applyCorrections", () => {
   it("overlays amended fields without mutating the stored entry", () => {
     const entry = newEntrySkeleton({ id: crypto.randomUUID(), timestamp: new Date().toISOString(), gps: null, audio: null, source: "voice" });
     entry.tags = ["original"];
-    entry.corrections.push(buildAmendCorrection({ tags: ["fixed"] }, "typo"));
+    entry.corrections.push(buildAmendCorrection({ tags: ["fixed"] }, DEVICE_ID, "typo"));
 
     const effective = applyCorrections(entry);
     expect(effective.tags).toEqual(["fixed"]);
@@ -198,8 +223,8 @@ describe("applyCorrections", () => {
 
   it("marks retracted=true and ignores nothing else that came before it", () => {
     const entry = newEntrySkeleton({ id: crypto.randomUUID(), timestamp: new Date().toISOString(), gps: null, audio: null, source: "voice" });
-    entry.corrections.push(buildAmendCorrection({ tags: ["kept"] }));
-    entry.corrections.push(buildRetractCorrection("bad entry"));
+    entry.corrections.push(buildAmendCorrection({ tags: ["kept"] }, DEVICE_ID));
+    entry.corrections.push(buildRetractCorrection(DEVICE_ID, "bad entry"));
 
     const effective = applyCorrections(entry);
     expect(effective.retracted).toBe(true);
@@ -208,6 +233,7 @@ describe("applyCorrections", () => {
 
   it("resolves a new-shape entry's transcript from its first correction", async () => {
     const entry = await buildEntry({
+      deviceId: DEVICE_ID,
       audioBlob: null,
       gps: null,
       transcript: TRANSCRIPT,
@@ -230,7 +256,7 @@ describe("applyCorrections", () => {
     const entry = newEntrySkeleton({ id: crypto.randomUUID(), timestamp: new Date().toISOString(), gps: null, audio: null, source: "voice" });
     entry.transcript = TRANSCRIPT;
     const corrected = { text: "corrected text", confidence: 0.99, language: "en", engine: "whisper-1" as const };
-    entry.corrections.push(buildAmendCorrection({ transcript: corrected }, "human fix"));
+    entry.corrections.push(buildAmendCorrection({ transcript: corrected }, DEVICE_ID, "human fix"));
 
     const effective = applyCorrections(entry);
     expect(effective.transcript).toEqual(corrected);
@@ -250,6 +276,24 @@ describe("applyCorrections", () => {
       created_at: new Date().toISOString(),
       type: "amend" as const,
       // no `author` field — this is the pre-existing shape
+      fields: { tags: ["legacy-fix"] },
+    };
+    entry.corrections.push(legacyCorrection);
+
+    const result = LogEntrySchema.safeParse(entry);
+    expect(result.success).toBe(true);
+  });
+
+  it("still parses a correction written before the deviceId field existed", () => {
+    // Same backward-compatibility reasoning as the author field: a required
+    // deviceId would brick every pre-existing correction on the next write.
+    const entry = newEntrySkeleton({ id: crypto.randomUUID(), timestamp: new Date().toISOString(), gps: null, audio: null, source: "voice" });
+    const legacyCorrection = {
+      id: crypto.randomUUID(),
+      created_at: new Date().toISOString(),
+      type: "amend" as const,
+      author: { kind: "human" as const },
+      // no `deviceId` field — this is the pre-existing shape
       fields: { tags: ["legacy-fix"] },
     };
     entry.corrections.push(legacyCorrection);

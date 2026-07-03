@@ -14,6 +14,7 @@ import {
 } from "../types/log-entry";
 
 interface BuildEntryParams {
+  deviceId: string;
   audioBlob: Blob | null;
   timestamp?: string; // defaults to now — capture time, not transcription-return time
   gps: GPSReading | null;
@@ -63,6 +64,7 @@ export async function buildEntry(params: BuildEntryParams): Promise<LogEntry> {
       entry.corrections.push(
         buildAmendCorrection(
           { transcript: params.transcript },
+          params.deviceId,
           undefined,
           { kind: "model", engine: params.transcript.engine },
         ),
@@ -86,6 +88,7 @@ async function buildAudioMeta(blob: Blob, id: string) {
 
 export function buildAmendCorrection(
   fields: EditableFields,
+  deviceId: string,
   reason?: string,
   author: CorrectionAuthor = HUMAN_AUTHOR,
 ): Correction {
@@ -94,12 +97,14 @@ export function buildAmendCorrection(
     created_at: nowIso(),
     type: "amend",
     author,
+    deviceId,
     reason,
     fields,
   };
 }
 
 export function buildRetractCorrection(
+  deviceId: string,
   reason?: string,
   author: CorrectionAuthor = HUMAN_AUTHOR,
 ): Correction {
@@ -108,6 +113,7 @@ export function buildRetractCorrection(
     created_at: nowIso(),
     type: "retract",
     author,
+    deviceId,
     reason,
   };
 }

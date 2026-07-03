@@ -11,6 +11,8 @@ import { InvariantViolationError } from "../../src/core/tensor-log/invariants";
 import { newEntrySkeleton } from "../../src/core/types/log-entry";
 import { buildAmendCorrection } from "../../src/core/tensor-log/entry-builder";
 
+const DEVICE_ID = crypto.randomUUID();
+
 function baseEntry(id = crypto.randomUUID()) {
   return newEntrySkeleton({
     id,
@@ -33,7 +35,7 @@ describe("local-db putEntry (fake-indexeddb)", () => {
     const entry = baseEntry();
     await putEntry(entry);
 
-    const amended = { ...entry, corrections: [buildAmendCorrection({ tags: ["fixed"] })] };
+    const amended = { ...entry, corrections: [buildAmendCorrection({ tags: ["fixed"] }, DEVICE_ID)] };
     await putEntry(amended);
 
     const back = await getEntry(entry.id);
@@ -42,7 +44,7 @@ describe("local-db putEntry (fake-indexeddb)", () => {
 
   it("rejects a write that drops a previously-committed correction", async () => {
     const entry = baseEntry();
-    const withCorrection = { ...entry, corrections: [buildAmendCorrection({ tags: ["x"] })] };
+    const withCorrection = { ...entry, corrections: [buildAmendCorrection({ tags: ["x"] }, DEVICE_ID)] };
     await putEntry(withCorrection);
 
     const stripped = { ...withCorrection, corrections: [] };
@@ -74,8 +76,8 @@ describe("local-db putEntry (fake-indexeddb)", () => {
     const entry = baseEntry();
     await putEntry(entry);
 
-    const correctionA = buildAmendCorrection({ tags: ["from-ui"] });
-    const correctionB = buildAmendCorrection({ tags: ["from-sync"] });
+    const correctionA = buildAmendCorrection({ tags: ["from-ui"] }, DEVICE_ID);
+    const correctionB = buildAmendCorrection({ tags: ["from-sync"] }, DEVICE_ID);
 
     const results = await Promise.allSettled([
       putEntry({ ...entry, corrections: [correctionA] }),
