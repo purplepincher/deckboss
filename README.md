@@ -24,11 +24,13 @@ so two offline devices can never step on each other's data (see
 
 Part of the [PurplePincher](https://github.com/purplepincher) Vessel-as-a-Robot
 family. See [ARCHITECTURE.md](./ARCHITECTURE.md) for how the pieces fit
-together, and [SAFETY.md](../cocapn-foundation) (in the sibling `cocapn-foundation`
-repo) for the longer-horizon autopilot/steering research this project
-deliberately keeps out of scope — see `ROADMAP.md`'s "Fleet learning: off
-the roadmap" entry for why that's a removed ambition, not just a deferred
-one.
+together, and [`docs/cocapn-foundation-mirror/SAFETY.md`](./docs/cocapn-foundation-mirror/SAFETY.md)
+(the local mirror of the sibling [`cocapn-foundation`](https://github.com/SuperInstance/cocapn-foundation)
+repo's safety/schema docs — mirrored because that repo doesn't guarantee
+permanence; see the mirror's [README](./docs/cocapn-foundation-mirror/README.md))
+for the longer-horizon autopilot/steering research this project deliberately
+keeps out of scope — see `ROADMAP.md`'s "Fleet learning: off the roadmap" entry
+for why that's a removed ambition, not just a deferred one.
 
 **DeckBoss is a personal log, not a substitute for official or regulatory
 catch reporting.** The additive-corrections design (see below) exists
