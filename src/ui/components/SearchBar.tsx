@@ -1,66 +1,113 @@
-import type { EntityType } from "../../core/types/log-entry";
+import { useEffect, useRef, useState } from "react";
+import { WebSpeechTranscriber, isWebSpeechSupported } from "../../services/webspeech";
 
-export interface SearchFilters {
-  text: string;
-  dateRange: "all" | "today" | "week";
-  entityType: EntityType | "all";
-  // Off by default so retracted entries stay out of the way in normal use
-  // (mirrors query-engine's own `includeRetracted` default of false) — this
-  // is the only UI control that can ever flip it on, since a retracted
-  // entry otherwise has no discoverable path back into view.
+// Safety cap: if the user forgets to tap the mic again, stop listening
+// automatically rather than leaving the mic open indefinitely. The design
+// memo calls for ~1.5s-of-silence auto-stop, but the v1 WebSpeech wrapper
+// has no silence event, so a fixed ceiling is the honest substitute.
+const MIC_TIMEOUT_MS = 10_000;
+
+export interface SearchBarProps {
+  query: string;
+  onQueryChange: (query: string) => void;
   showRetracted: boolean;
+  onShowRetractedChange: (show: boolean) => void;
+  micDisabled?: boolean;
+  micDisabledReason?: string;
 }
 
-const ENTITY_OPTIONS: { value: EntityType | "all"; label: string }[] = [
-  { value: "all", label: "All tags" },
-  { value: "species", label: "Species" },
-  { value: "gear", label: "Gear" },
-  { value: "depth", label: "Depth" },
-  { value: "weather", label: "Weather" },
-];
-
 export function SearchBar({
-  filters,
-  onChange,
-}: {
-  filters: SearchFilters;
-  onChange: (filters: SearchFilters) => void;
-}) {
+  query,
+  onQueryChange,
+  showRetracted,
+  onShowRetractedChange,
+  micDisabled = false,
+  micDisabledReason,
+}: SearchBarProps) {
+  const [listening, setListening] = useState(false);
+  const transcriberRef = useRef<WebSpeechTranscriber | null>(null);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const webSpeechSupported = isWebSpeechSupported();
+
+  useEffect(() => {
+    return () => {
+      transcriberRef.current?.stop();
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    };
+  }, []);
+
+  const stopListening = () => {
+    const t = transcriberRef.current;
+    if (!t) return;
+    const result = t.stop();
+    transcriberRef.current = null;
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+    setListening(false);
+    if (result.text) {
+      onQueryChange(result.text);
+    }
+  };
+
+  const startListening = () => {
+    if (!webSpeechSupported || micDisabled) return;
+    const t = new WebSpeechTranscriber();
+    transcriberRef.current = t;
+    t.start();
+    setListening(true);
+    timeoutRef.current = setTimeout(() => {
+      stopListening();
+    }, MIC_TIMEOUT_MS);
+  };
+
+  const handleMicClick = () => {
+    if (listening) {
+      stopListening();
+    } else {
+      startListening();
+    }
+  };
+
+  const micAvailable = webSpeechSupported && !micDisabled;
+  const micTitle = micDisabled
+    ? micDisabledReason || "Voice search unavailable"
+    : webSpeechSupported
+      ? listening
+        ? "Tap to stop listening"
+        : "Tap to search by voice"
+      : "Voice search not supported in this browser";
+
   return (
     <div className="search-bar">
-      <input
-        type="search"
-        placeholder="Search transcripts..."
-        value={filters.text}
-        onChange={(e) => onChange({ ...filters, text: e.target.value })}
-      />
-      <div className="search-filters">
-        <select
-          value={filters.dateRange}
-          onChange={(e) => onChange({ ...filters, dateRange: e.target.value as SearchFilters["dateRange"] })}
+      <div className="ask-input-row">
+        <input
+          type="search"
+          className="ask-search-input"
+          placeholder="Ask your log..."
+          value={query}
+          onChange={(e) => onQueryChange(e.target.value)}
+          aria-label="Ask your log"
+        />
+        <button
+          type="button"
+          className={`ask-mic-button ${listening ? "listening" : ""} ${!micAvailable ? "disabled" : ""}`}
+          onClick={handleMicClick}
+          disabled={!micAvailable}
+          aria-label={micTitle}
+          title={micTitle}
         >
-          <option value="all">All time</option>
-          <option value="today">Today</option>
-          <option value="week">This week</option>
-        </select>
-        <select
-          value={filters.entityType}
-          onChange={(e) =>
-            onChange({ ...filters, entityType: e.target.value as SearchFilters["entityType"] })
-          }
-        >
-          {ENTITY_OPTIONS.map((o) => (
-            <option key={o.value} value={o.value}>
-              {o.label}
-            </option>
-          ))}
-        </select>
+          🎤
+        </button>
       </div>
+      {listening && <div className="ask-listening-label">Listening&hellip;</div>}
       <label className="search-retracted-toggle">
         <input
           type="checkbox"
-          checked={filters.showRetracted}
-          onChange={(e) => onChange({ ...filters, showRetracted: e.target.checked })}
+          checked={showRetracted}
+          onChange={(e) => onShowRetractedChange(e.target.checked)}
         />
         Show retracted
       </label>

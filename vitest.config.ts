@@ -7,7 +7,7 @@ export default mergeConfig(
     test: {
       environment: "jsdom",
       globals: true,
-      include: ["tests/unit/**/*.test.ts"],
+      include: ["tests/unit/**/*.test.ts", "tests/unit/**/*.test.tsx"],
       // jsdom doesn't implement IndexedDB — local-db.ts and anything that
       // imports it need a real (fake) implementation to run under Vitest.
       setupFiles: ["./tests/setup.ts"],
