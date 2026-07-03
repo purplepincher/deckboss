@@ -1,9 +1,6 @@
 import { useEffect, useState } from "react";
 import { useDeckBossStore } from "../../state/store";
-import { buildAdapter } from "../../core/storage/registry";
-import { LocalZipAdapter } from "../../core/storage/adapters/local-zip";
-import type { GoogleDriveAdapter } from "../../core/storage/adapters/google-drive";
-import { pushAllLocalEntries } from "../../core/sync/sync-engine";
+import { useStorage } from "../hooks/useStorage";
 import type { StorageBackendId } from "../../core/storage/interface";
 import { getDiagnostics, type Diagnostics } from "../../core/diagnostics";
 import { isStoragePersisted } from "../../core/storage/persistence";
@@ -20,6 +17,7 @@ export function SettingsScreen() {
   const configLoaded = useDeckBossStore((s) => s.configLoaded);
   const loadConfig = useDeckBossStore((s) => s.loadConfig);
   const saveConfig = useDeckBossStore((s) => s.saveConfig);
+  const storage = useStorage();
   const [busy, setBusy] = useState<string | null>(null);
   const [diagnostics, setDiagnostics] = useState<Diagnostics | null>(null);
   const [persisted, setPersisted] = useState<boolean | null>(null);
@@ -53,25 +51,19 @@ export function SettingsScreen() {
 
     setBusy(id);
     try {
-      if (id === "google-drive") {
-        const next = { ...config, storage: { ...config.storage, activeBackend: id } };
-        const adapter = await buildAdapter(next);
-        await adapter?.authenticate();
-        const authState = (adapter as GoogleDriveAdapter | null)?.getAuthState();
-        if (authState) {
-          next.storage.googleDrive = {
-            ...config.storage.googleDrive,
-            connected: true,
-            accessToken: authState.accessToken,
-            tokenExpiresAt: authState.tokenExpiresAt,
-            refreshToken: null,
-            folderId: null,
-          };
-        }
-        await saveConfig(next);
-      } else {
-        await saveConfig({ ...config, storage: { ...config.storage, activeBackend: id } });
+      const next = { ...config, storage: { ...config.storage, activeBackend: id } };
+      const googleDriveAuth = await storage.connect(next);
+      if (googleDriveAuth) {
+        next.storage.googleDrive = {
+          ...config.storage.googleDrive,
+          connected: true,
+          accessToken: googleDriveAuth.accessToken,
+          tokenExpiresAt: googleDriveAuth.tokenExpiresAt,
+          refreshToken: null,
+          folderId: null,
+        };
       }
+      await saveConfig(next);
     } catch (err) {
       alert(err instanceof Error ? err.message : "Could not connect.");
     } finally {
@@ -91,8 +83,7 @@ export function SettingsScreen() {
       } else {
         next.storage.oracleOci = { endpoint, bucket, accessKeyId, secretAccessKey };
       }
-      const adapter = await buildAdapter(next);
-      await adapter?.authenticate();
+      await storage.connect(next);
       await saveConfig(next);
       setOpenForm(null);
       setFormFields({ endpoint: "", bucket: "", accessKeyId: "", secretAccessKey: "" });
@@ -108,18 +99,7 @@ export function SettingsScreen() {
     try {
       const zipConfig = { ...config, storage: { ...config.storage, activeBackend: "local-zip" as const } };
       await saveConfig(zipConfig);
-      await pushAllLocalEntries();
-      const adapter = (await buildAdapter(zipConfig)) as LocalZipAdapter;
-      // Bundled so a fisherman can hit one button and send the resulting
-      // .zip when something seems wrong, without needing to know what
-      // GitHub is — this is the whole support path for the field beta.
-      const currentDiagnostics = await getDiagnostics();
-      const persistedNow = await isStoragePersisted();
-      await adapter.writeFile(
-        "diagnostics.json",
-        JSON.stringify({ ...currentDiagnostics, storagePersisted: persistedNow }, null, 2),
-      );
-      const blob = await adapter.exportZip();
+      const blob = await storage.exportZip(zipConfig);
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
