@@ -34,10 +34,23 @@
       error and no visible on-screen indication. This is exactly the kind
       of self-inflicted regression a security tightening pass can cause —
       worth remembering when this policy gets touched again.
+
+      script-src allows 'self' plus https://accounts.google.com: the
+      Google Drive adapter (adapters/google-drive.ts's loadGisScript())
+      dynamically injects Google Identity Services from that origin to
+      run the OAuth token-client flow client-side. Under a bare
+      script-src 'self' that cross-origin script is blocked, and
+      authenticate() rejects with "Failed to load Google Identity
+      Services script." — silently breaking the entire Drive backend the
+      moment a user configures a Client ID. This is the narrowest
+      allowance that unbreaks it (the GIS loader is the only
+      cross-origin script the app injects); it does NOT widen to
+      'unsafe-inline' or 'unsafe-eval', and the GIS script itself is
+      first-party Google code fetched over HTTPS.
     -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self' blob:; object-src 'none'; base-uri 'self'; connect-src *;"
+      content="default-src 'self'; script-src 'self' https://accounts.google.com; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self' blob:; object-src 'none'; base-uri 'self'; connect-src *;"
     />
     <link rel="icon" href="/icons/icon-192x192.png" />
     <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
