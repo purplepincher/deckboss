@@ -10,6 +10,7 @@ import {
   type EffectiveLogEntry,
   type Correction,
   type EditableFields,
+  type CorrectionAuthor,
 } from "../types/log-entry";
 
 interface BuildEntryParams {
@@ -21,10 +22,17 @@ interface BuildEntryParams {
   threadId?: string;
 }
 
+const HUMAN_AUTHOR: CorrectionAuthor = { kind: "human" };
+
 /**
  * The only place a LogEntry gets constructed. GPS or transcript being
  * unavailable never blocks this — a null gps and a null transcript are both
  * valid entries (dev guide §7.1/§7.6: "never block the recording pipeline").
+ *
+ * The first transcript is stored as a correction rather than written directly
+ * to the base record: transcript is an interpretation of the capture (audio +
+ * GPS + timestamp), not a capture-time fact. Legacy entries with transcript set
+ * directly are still honored by applyCorrections().
  */
 export async function buildEntry(params: BuildEntryParams): Promise<LogEntry> {
   const id = newId();
@@ -42,8 +50,14 @@ export async function buildEntry(params: BuildEntryParams): Promise<LogEntry> {
   });
 
   if (params.transcript) {
-    entry.transcript = params.transcript;
     entry.entities = extractEntities(params.transcript.text);
+    entry.corrections.push(
+      buildAmendCorrection(
+        { transcript: params.transcript },
+        undefined,
+        { kind: "model", engine: params.transcript.engine },
+      ),
+    );
   }
 
   return entry;
@@ -60,21 +74,30 @@ async function buildAudioMeta(blob: Blob, id: string) {
   };
 }
 
-export function buildAmendCorrection(fields: EditableFields, reason?: string): Correction {
+export function buildAmendCorrection(
+  fields: EditableFields,
+  reason?: string,
+  author: CorrectionAuthor = HUMAN_AUTHOR,
+): Correction {
   return {
     id: newId(),
     created_at: nowIso(),
     type: "amend",
+    author,
     reason,
     fields,
   };
 }
 
-export function buildRetractCorrection(reason?: string): Correction {
+export function buildRetractCorrection(
+  reason?: string,
+  author: CorrectionAuthor = HUMAN_AUTHOR,
+): Correction {
   return {
     id: newId(),
     created_at: nowIso(),
     type: "retract",
+    author,
     reason,
   };
 }

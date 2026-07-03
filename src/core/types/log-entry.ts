@@ -119,10 +119,17 @@ export const EditableFieldsSchema = z
   .partial();
 export type EditableFields = z.infer<typeof EditableFieldsSchema>;
 
+export const CorrectionAuthorSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("human") }),
+  z.object({ kind: z.literal("model"), engine: TranscriptionEngineSchema }),
+]);
+export type CorrectionAuthor = z.infer<typeof CorrectionAuthorSchema>;
+
 export const CorrectionSchema = z.object({
   id: uuidV4,
   created_at: isoDateString,
   type: z.enum(["amend", "retract"]),
+  author: CorrectionAuthorSchema,
   reason: z.string().optional(),
   fields: EditableFieldsSchema.optional(), // present for "amend", absent for "retract"
 });
