@@ -41,6 +41,15 @@
     />
     <link rel="icon" href="/icons/icon-192x192.png" />
     <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
+    <!-- iOS home-screen launch. Modern iOS (>=12.2) honors the manifest's
+         `display: standalone`, but older iOS only launches standalone (no
+         Safari chrome) when this capability meta is present, and uses this
+         title for the home-screen icon label. apple-mobile-web-app-status-
+         bar-style is intentionally omitted: black-translucent would push
+         content under the notch without safe-area-inset handling this app
+         doesn't do. -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="DeckBoss" />
     <title>DeckBoss</title>
   </head>
   <body>
