@@ -51,13 +51,23 @@ export async function buildEntry(params: BuildEntryParams): Promise<LogEntry> {
 
   if (params.transcript) {
     entry.entities = extractEntities(params.transcript.text);
-    entry.corrections.push(
-      buildAmendCorrection(
-        { transcript: params.transcript },
-        undefined,
-        { kind: "model", engine: params.transcript.engine },
-      ),
-    );
+    // A live black-box test found that silence/no-signal recordings (a
+    // real TranscriptResult object, but with text: "") were getting
+    // marked "edited" in the UI despite never having been touched by a
+    // human — because any truthy transcript result pushed a correction,
+    // and applyCorrections() sets amended=true for any correction at
+    // all, empty or not. There's nothing meaningful to record as a
+    // correction when the engine returned nothing, so skip it — the
+    // entry correctly falls back to "No transcript" in the UI either way.
+    if (params.transcript.text.trim().length > 0) {
+      entry.corrections.push(
+        buildAmendCorrection(
+          { transcript: params.transcript },
+          undefined,
+          { kind: "model", engine: params.transcript.engine },
+        ),
+      );
+    }
   }
 
   return entry;

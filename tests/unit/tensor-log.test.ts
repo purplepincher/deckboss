@@ -124,6 +124,26 @@ describe("buildEntry", () => {
     expect(correction?.fields?.transcript).toEqual(TRANSCRIPT);
   });
 
+  it("does not mark a silence/no-signal recording as edited", async () => {
+    // A live black-box test found this: a real TranscriptResult with
+    // text: "" (silence, no speech recognized) still pushed a correction,
+    // and applyCorrections() sets amended=true for any correction at all
+    // — so a captain who spoke to a dead mic saw their entry both say "No
+    // transcript" AND show an "edited" chip, despite never touching it.
+    const emptyTranscript = { text: "", confidence: 0, language: "en", engine: "webspeech" as const };
+    const entry = await buildEntry({
+      audioBlob: null,
+      gps: null,
+      transcript: emptyTranscript,
+      source: "voice",
+    });
+
+    expect(entry.corrections).toHaveLength(0);
+    const effective = applyCorrections(entry);
+    expect(effective.amended).toBe(false);
+    expect(effective.transcript).toBeNull();
+  });
+
   it("runs entity extraction when a transcript is provided", async () => {
     const entry = await buildEntry({
       audioBlob: null,
