@@ -138,7 +138,11 @@ async function refreshManifest(): Promise<void> {
     generatedAt: nowIso(),
     entries: local.map((e) => ({
       path: entryPath(e.timestamp, e.id),
-      size: 0,
+      // Real byte size of the serialized file, not a placeholder — a
+      // multi-model review round caught this hardcoded at 0, which makes
+      // FileMetadata.size useless for anything that might one day want it
+      // (bandwidth estimates, storage-quota warnings).
+      size: new Blob([serializeEntry(e)]).size,
       modifiedAt: e.timestamp,
     })),
   });
@@ -148,8 +152,22 @@ async function getActiveAdapter(): Promise<StorageAdapter | null> {
   const config = await getConfig();
   const adapter = await buildAdapter(config);
   if (!adapter) return null;
-  if (!(await adapter.isAuthenticated())) return null;
-  return adapter;
+  if (await adapter.isAuthenticated()) return adapter;
+
+  // Google Drive's authenticate() opens an interactive OAuth popup — it
+  // must never fire unprompted during a background sync check. Every
+  // other backend's "authenticate" is just a credentials-already-in-config
+  // network check, safe to retry silently — this is what makes sync
+  // self-heal after a page reload instead of requiring the user to
+  // manually hit Settings → Connect again every time they reopen the app.
+  if (config.storage.activeBackend === "google-drive") return null;
+
+  try {
+    await adapter.authenticate();
+  } catch {
+    return null;
+  }
+  return (await adapter.isAuthenticated()) ? adapter : null;
 }
 
 export async function syncNow(): Promise<{ pushed: number; pulled: number }> {

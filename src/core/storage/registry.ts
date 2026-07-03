@@ -13,8 +13,52 @@ import type { AppConfig } from "../../config/schema";
  * every user's bundle even though most sessions never touch those
  * backends. This function is async now so each adapter's code only
  * downloads and parses when actually selected.
+ *
+ * Cached by config, not rebuilt on every call: a real bug (found by a
+ * multi-model review round) — constructing a fresh adapter instance per
+ * call meant every adapter's in-memory auth state (S3CompatibleAdapter's
+ * `verified` flag, GoogleDriveAdapter's `accessToken`) was thrown away
+ * immediately after `authenticate()` set it, so `isAuthenticated()` on
+ * the *next* call always saw a brand-new, never-authenticated instance —
+ * sync silently no-op'd for every network backend, permanently, the
+ * moment "Connect" finished. The same statelessness meant
+ * SettingsScreen.exportZip()'s push-entries step and its own
+ * write-diagnostics-and-zip step were writing into two different
+ * LocalZipAdapter instances, so the exported .zip never actually
+ * contained the log entries, only diagnostics.json. One cache, keyed by
+ * the config that would otherwise construct a fresh instance, fixes both:
+ * the same instance now serves every call until the user actually changes
+ * backend or credentials.
  */
+
+let cached: { key: string; adapter: StorageAdapter } | null = null;
+
+function cacheKey(config: AppConfig): string {
+  // Only the fields that actually determine adapter identity/credentials —
+  // not the whole AppConfig (transcription settings changing shouldn't
+  // invalidate a live, authenticated storage connection).
+  return JSON.stringify({
+    backend: config.storage.activeBackend,
+    r2: config.storage.cloudflareR2,
+    oracle: config.storage.oracleOci,
+  });
+}
+
 export async function buildAdapter(config: AppConfig): Promise<StorageAdapter | null> {
+  const key = cacheKey(config);
+  if (cached && cached.key === key) return cached.adapter;
+
+  const adapter = await construct(config);
+  cached = adapter ? { key, adapter } : null;
+  return adapter;
+}
+
+/** Settings screens call this after a user explicitly disconnects a backend, so a stale cached instance can't outlive its credentials. */
+export function clearAdapterCache(): void {
+  cached = null;
+}
+
+async function construct(config: AppConfig): Promise<StorageAdapter | null> {
   switch (config.storage.activeBackend) {
     case "local-zip": {
       const { LocalZipAdapter } = await import("./adapters/local-zip");
