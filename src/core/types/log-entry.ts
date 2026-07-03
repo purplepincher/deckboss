@@ -129,7 +129,17 @@ export const CorrectionSchema = z.object({
   id: uuidV4,
   created_at: isoDateString,
   type: z.enum(["amend", "retract"]),
-  author: CorrectionAuthorSchema,
+  // Optional, not required: a correction written before this field existed
+  // has no `author` on disk. Since this app has no backend and no way to
+  // know whether a given local IndexedDB already holds real corrections
+  // from before this change, `author` must stay optional forever (or until
+  // a version-gated migration is worth writing) — a required field here
+  // would mean any pre-existing author-less correction fails
+  // LogEntrySchema.parse() on the next write to that entry, silently
+  // bricking amend/retract for it. Absent means "assume human" wherever
+  // this gets consumed (matches buildAmendCorrection/buildRetractCorrection's
+  // own default for new corrections).
+  author: CorrectionAuthorSchema.optional(),
   reason: z.string().optional(),
   fields: EditableFieldsSchema.optional(), // present for "amend", absent for "retract"
 });

@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { serializeEntry } from "../../src/core/tensor-log/entry-serializer";
 import { parseEntry, EntryParseError } from "../../src/core/tensor-log/entry-parser";
 import { buildEntry, applyCorrections, buildAmendCorrection, buildRetractCorrection } from "../../src/core/tensor-log/entry-builder";
-import { newEntrySkeleton } from "../../src/core/types/log-entry";
+import { newEntrySkeleton, LogEntrySchema } from "../../src/core/types/log-entry";
 
 function mockGps() {
   return {
@@ -214,5 +214,27 @@ describe("applyCorrections", () => {
 
     const effective = applyCorrections(entry);
     expect(effective.transcript).toEqual(corrected);
+  });
+
+  it("still parses a correction written before the author field existed", () => {
+    // `author` was added to CorrectionSchema in the same change that made
+    // buildEntry() start writing transcripts as corrections. Making it
+    // required would mean any correction already sitting in a real user's
+    // IndexedDB from before this change fails LogEntrySchema.parse() on the
+    // entry's next write — silently bricking amend/retract for that entry.
+    // This proves the field is genuinely optional at the schema level, not
+    // just optional by convention in the builders.
+    const entry = newEntrySkeleton({ id: crypto.randomUUID(), timestamp: new Date().toISOString(), gps: null, audio: null, source: "voice" });
+    const legacyCorrection = {
+      id: crypto.randomUUID(),
+      created_at: new Date().toISOString(),
+      type: "amend" as const,
+      // no `author` field — this is the pre-existing shape
+      fields: { tags: ["legacy-fix"] },
+    };
+    entry.corrections.push(legacyCorrection);
+
+    const result = LogEntrySchema.safeParse(entry);
+    expect(result.success).toBe(true);
   });
 });
