@@ -123,6 +123,12 @@ textarea {
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  /* Anchors the post-save Discard bar (.discard-bar is position:absolute
+     bottom:0) so it can sit in a fixed slot directly above the bottom nav
+     without entering the flex flow — the record button's centered position
+     never shifts when the bar appears or fades (design rule 2: capture is
+     sacred). */
+  position: relative;
   height: 100%;
   gap: 24px;
   text-align: center;
@@ -214,6 +220,43 @@ textarea {
   color: var(--warn);
   font-size: 13px;
   max-width: 320px;
+}
+
+/* Post-save Discard bar (Fable memo §1.B). One reserved slot, pinned to the
+   bottom of the record screen = directly above the bottom nav. Absolute so
+   it never enters the flex flow and never moves the record button. */
+.discard-bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  min-height: 56px;
+  display: flex;
+  align-items: stretch;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 16px;
+  background: var(--card-bg);
+  border-top: 1px solid var(--card-border);
+}
+.discard-bar-message {
+  display: flex;
+  align-items: center;
+  font-size: 14px;
+  color: var(--text);
+}
+/* --warn, not --accent: red is the record-button identity color and stays
+   reserved for it (memo §1.B). Matches the existing record-warning pattern. */
+.discard-bar-button {
+  min-height: 48px;
+  padding: 10px 18px;
+  align-self: center;
+  background: transparent;
+  border: 1px solid var(--warn);
+  color: var(--warn);
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
 }
 
 /* GPS badge */
