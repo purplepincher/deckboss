@@ -20,6 +20,24 @@ reviewed or certified as evidence-grade for licensing or compliance
 purposes — it hasn't. Don't rely on it for anything a regulator or insurer
 needs to accept as authoritative.
 
+## Documentation by audience
+
+- **Just want to use it?** → [docs/USER_GUIDE.md](./docs/USER_GUIDE.md) —
+  no jargon, no assumed technical knowledge.
+- **Want to fork it, self-host it, or adapt it for a different trade?** →
+  [docs/CUSTOMIZING.md](./docs/CUSTOMIZING.md)
+- **Want to contribute changes back to this repo?** →
+  [CONTRIBUTING.md](./CONTRIBUTING.md) — three lanes depending on whether
+  you're reporting a bug, suggesting a domain change, or writing code.
+- **Want to understand how the codebase actually fits together?** →
+  [ARCHITECTURE.md](./ARCHITECTURE.md) — the module map and the design
+  invariants everything else is built on.
+- **Curious about the strategic reasoning and open decisions?** →
+  [ROADMAP.md](./ROADMAP.md) — the living decision record.
+
+The rest of this file is the technical setup reference: running it
+locally, deploying your own instance, and configuring storage backends.
+
 ## Status
 
 Phase 1 MVP — see the roadmap in project history. Working today:
@@ -103,8 +121,12 @@ version:
 
 - **Corrections are additive, never destructive.** Editing or "deleting" an
   entry appends a Correction event; the original capture is never
-  overwritten. This is a deliberate divergence from the original Phase 1 dev
-  guide, made to keep Phase 4's regulatory-compliance goal viable.
+  overwritten. The real justification is sync safety, not compliance
+  (see the disclaimer above): because edits are additive, two devices
+  editing the same entry produce two Correction objects that always merge
+  safely instead of conflicting — this is what makes offline sync work
+  without a last-write-wins data-loss risk. See the doc comment at the
+  top of `src/core/types/log-entry.ts` for the full reasoning.
 - **Web Speech API is the default transcription engine**, not Whisper — a
   beta fisherman shouldn't need an OpenAI account before their first
   recording works.
