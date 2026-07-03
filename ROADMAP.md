@@ -239,12 +239,11 @@ review. All four ran against the live deployment, not the source.
   contradict the same "never lose a capture" principle defended
   everywhere else in this codebase. The existing Retract flow already
   covers "delete this, it was a mistake."
-- Timeline render time drifts to 1.5-3s at ~800 entries (vs. near-instant
-  at smaller counts) — not broken, list stays responsive once loaded
-  (pagination keeps rendered DOM nodes low regardless of total count),
-  but worth profiling if real usage grows past a season's worth of
-  entries. Likely the Zod-validation pass in `allEntries()` running
-  against every stored record on load.
+- ~~Timeline render time drifts to 1.5-3s at ~800 entries~~ — **fixed**
+  in a later pass (see "Multi-model round-table" below): a fast-path
+  shape guard in `allEntries()` avoids re-running full Zod validation on
+  every load for records already known-valid, plus a per-entry memoized
+  corrections-fold in the store. Now ~20-40ms for 1000 entries.
 
 **Confirmed, not yet resolved — matches Fable's flagged risk exactly:**
 Cross-browser testing found Web Speech API absent on both Firefox and
@@ -259,3 +258,38 @@ on both macOS and iOS. Treat this as inconclusive, not confirmation that
 real iPhones can't record. The device census and hands-on setup session
 with actual field testers' phones (see above) is still the only way to
 actually resolve this.
+
+## Multi-model round-table: frontend/backend cohesion
+
+A separate exercise from the iteration-1 beta test above — instead of one
+model reviewing the code, three independent reviewers (a Claude subagent,
+aider running DeepSeek, and Kimi) answered the same design questions with
+no visibility into each other's answers, plus Fable answering a
+compressed, code-free "most novel big-picture bet" question as a fourth,
+deliberately different-shaped seat. Full writeup:
+`docs/ROUNDTABLE_SYNTHESIS.md`.
+
+**The headline result was a bug, not a design opinion.** Claude's review
+found and this session fixed a genuinely critical bug: `registry.ts`
+built a fresh, never-authenticated adapter instance on every call, so
+cloud sync silently no-op'd for every network backend from the moment
+Settings → Connect finished, and Export ZIP never actually contained log
+entries — both permanently broken, until this fix, for the entire time
+the app has been live. This is now fixed (adapter instances are cached by
+config) and covered by regression tests. Given this was the exact backup
+mechanism `docs/USER_GUIDE.md` told captains to rely on, this was the
+most important thing to come out of this whole session.
+
+Also fixed in the same pass: a manifest-size bug (hardcoded to 0), a
+lost-update race in `putEntry()` for concurrent same-entry writes, and a
+missing guard against overlapping `syncNow()` calls — the latter two were
+previously unreachable because sync silently never ran, and became live
+risks the moment the adapter bug was fixed.
+
+**Not yet fixed, real finding**: `EntryDetailScreen.tsx` bypasses the
+store/hook layer and hand-mutates raw `LogEntry.corrections`, found
+independently by two of three code reviewers (the third simply didn't
+have that file in its context — see the synthesis doc for why that's a
+methodology note, not a real disagreement). Worth a follow-up: add
+`amendEntry`/`retractEntry` actions to the store so the write path is as
+clean as the read path already is.
