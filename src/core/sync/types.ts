@@ -17,6 +17,7 @@ export const SyncJobTypeSchema = z.enum([
   "upload_entry", // write one LogEntry's .md file
   "upload_audio", // write one entry's audio blob
   "delete_entry", // propagate a retract (still additive on disk — see log-entry.ts)
+  "whisper_retry", // retry a Whisper transcription once the device is back online
   "download_manifest",
   "download_file",
 ]);
@@ -28,6 +29,7 @@ export const SyncJobPayloadSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("upload_entry"), entryId: uuidV4 }),
   z.object({ type: z.literal("upload_audio"), entryId: uuidV4, audioPath: z.string() }),
   z.object({ type: z.literal("delete_entry"), entryId: uuidV4 }),
+  z.object({ type: z.literal("whisper_retry"), entryId: uuidV4, language: z.string() }),
   z.object({ type: z.literal("download_manifest") }),
   z.object({ type: z.literal("download_file"), path: z.string() }),
 ]);

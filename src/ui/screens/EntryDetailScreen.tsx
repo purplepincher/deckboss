@@ -52,7 +52,10 @@ export function EntryDetailScreen() {
       )}
 
       <div className="entry-detail-transcript">
-        {effective.transcript?.text || "No transcript — audio saved. Play it back below."}
+        {effective.transcript?.text ||
+          (effective.pendingTranscript === "whisper_retry"
+            ? "Transcript pending — will retry when online."
+            : "No transcript — audio saved. Play it back below.")}
       </div>
 
       <AudioWaveform blob={audioBlob} />

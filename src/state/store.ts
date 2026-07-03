@@ -7,7 +7,7 @@ import {
   setConfig as persistConfig,
 } from "../core/storage/local-db";
 import { applyCorrections, buildAmendCorrection, buildRetractCorrection } from "../core/tensor-log/entry-builder";
-import { enqueueEntryForSync } from "../core/sync/sync-engine";
+import { enqueueEntryForSync, pendingWhisperRetryEntryIds } from "../core/sync/sync-engine";
 import { defaultAppConfig, type AppConfig } from "../config/schema";
 import type { LogEntry, EffectiveLogEntry, EditableFields } from "../core/types/log-entry";
 
@@ -59,7 +59,7 @@ export const useDeckBossStore = create<DeckBossStore>((set, get) => ({
   entries: [],
   entriesLoaded: false,
   loadEntries: async () => {
-    const raw = await allEntries();
+    const [raw, pendingWhisper] = await Promise.all([allEntries(), pendingWhisperRetryEntryIds()]);
     const next: EffectiveLogEntry[] = [];
     const seen = new Set<string>();
 
@@ -68,9 +68,19 @@ export const useDeckBossStore = create<DeckBossStore>((set, get) => ({
       const sig = correctionsSig(entry);
       const cached = effectiveCache.get(entry.id);
       if (cached && correctionSignature.get(entry.id) === sig) {
-        next.push(cached);
+        const wantsPending: "whisper_retry" | null = pendingWhisper.has(entry.id) ? "whisper_retry" : null;
+        if (cached.pendingTranscript !== wantsPending) {
+          const updated = { ...cached, pendingTranscript: wantsPending };
+          effectiveCache.set(entry.id, updated);
+          next.push(updated);
+        } else {
+          next.push(cached);
+        }
       } else {
         const effective = applyCorrections(entry);
+        if (pendingWhisper.has(entry.id)) {
+          effective.pendingTranscript = "whisper_retry";
+        }
         effectiveCache.set(entry.id, effective);
         correctionSignature.set(entry.id, sig);
         next.push(effective);

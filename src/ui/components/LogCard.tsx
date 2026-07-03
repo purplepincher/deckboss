@@ -13,8 +13,13 @@ export function LogCard({ entry, relative = true }: { entry: EffectiveLogEntry; 
   // "No transcript yet" implies it's still coming — for the default Web
   // Speech engine that's usually not true (it only transcribes live, there's
   // no retry-later path once the recording stops), so the empty state has
-  // to be honest: the audio is safe, there just isn't text for it.
-  const preview = entry.transcript?.text?.slice(0, 80) || "No transcript — audio saved";
+  // to be honest: the audio is safe, there just isn't text for it. The
+  // Whisper engine is different — a failed offline recording really is still
+  // coming once connectivity returns, so surface that pending state clearly.
+  const isWhisperPending = entry.pendingTranscript === "whisper_retry";
+  const preview =
+    entry.transcript?.text?.slice(0, 80) ||
+    (isWhisperPending ? "Transcript pending — will retry when online" : "No transcript — audio saved");
 
   return (
     <Link to={`/entry/${entry.id}`} className={`log-card ${entry.retracted ? "retracted" : ""}`}>

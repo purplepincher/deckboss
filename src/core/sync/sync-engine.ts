@@ -17,6 +17,9 @@ import { mimeToExt } from "../../utils/file";
 import { newId } from "../../utils/id";
 import { nowIso } from "../../utils/date";
 import type { SyncJob } from "./types";
+import { transcribeWithWhisper, WhisperApiError, WhisperNetworkError } from "../../services/whisper";
+import { applyCorrections, buildAmendCorrection } from "../tensor-log/entry-builder";
+import { extractEntities } from "../../services/entity-extractor";
 
 // Lazy-loaded: serializeEntry/parseEntry pull in js-yaml (~31KB gzip, ~20%
 // of the pre-fix main bundle), but they're only needed on the sync write/read
@@ -64,6 +67,44 @@ export async function enqueueAudioForSync(entryId: string, blob: Blob, priority:
     error: null,
   };
   await enqueueSyncJob(job);
+}
+
+/**
+ * Queue a stored audio recording for Whisper transcription once the device is
+ * back online. This is the recovery path for the offline-at-sea case: the
+ * recording is already saved locally (audio blob + entry), but the Whisper call
+ * failed because the network was unreachable. The language is frozen at enqueue
+ * time so a later Settings change doesn't silently alter which language a
+ * queued retry runs in.
+ */
+export async function enqueueWhisperRetry(entryId: string, language: string, priority: 0 | 1 = 1): Promise<void> {
+  const jobs = await allSyncJobs();
+  const alreadyQueued = jobs.some((j) => j.payload.type === "whisper_retry" && j.payload.entryId === entryId);
+  if (alreadyQueued) return;
+
+  const job: SyncJob = {
+    id: newId(),
+    type: "whisper_retry",
+    payload: { type: "whisper_retry", entryId, language },
+    priority,
+    retries: 0,
+    maxRetries: 20,
+    createdAt: nowIso(),
+    lastAttempt: null,
+    error: null,
+  };
+  await enqueueSyncJob(job);
+}
+
+/** Returns the set of entry ids that currently have a pending Whisper retry job. */
+export async function pendingWhisperRetryEntryIds(): Promise<Set<string>> {
+  const jobs = await allSyncJobs();
+  return new Set(
+    jobs
+      .map((j) => j.payload)
+      .filter((p): p is Extract<SyncJob["payload"], { type: "whisper_retry" }> => p.type === "whisper_retry")
+      .map((p) => p.entryId),
+  );
 }
 
 /**
@@ -132,6 +173,55 @@ async function handleJob(job: SyncJob, adapter: StorageAdapter): Promise<void> {
       if (!entry) return;
       const { serializeEntry } = await lazySerializer();
       await adapter.writeFile(entryPath(entry.timestamp, entry.id), serializeEntry(entry));
+      return;
+    }
+    case "whisper_retry": {
+      // Offline-recovery path for Whisper: the audio blob and entry are
+      // already local, but the original transcription failed because the
+      // network was unreachable. If we can transcribe it now, attach the
+      // result as an amend Correction (the same path a human edit uses) so
+      // the original capture-time record stays untouched.
+      const entry = await getEntry(job.payload.entryId);
+      if (!entry) return; // entry gone — nothing to transcribe
+
+      const effective = applyCorrections(entry);
+      if (effective.transcript) return; // already got a transcript somehow
+
+      const blob = await getAudioBlob(job.payload.entryId);
+      if (!blob) return; // local audio gone — unrecoverable from here
+
+      const config = await getConfig();
+      if (!config.transcription.whisperApiKey) return; // Whisper de-configured — permanent failure
+
+      let result;
+      try {
+        result = await transcribeWithWhisper(blob, config.transcription.whisperApiKey, job.payload.language);
+      } catch (err) {
+        if (err instanceof WhisperNetworkError || err instanceof WhisperApiError) {
+          // Network errors should retry with backoff; API errors (bad key,
+          // quota, malformed audio) are permanent for this recording. Throwing
+          // here keeps the job in the queue for network cases, while returning
+          // for API errors removes it so it doesn't burn retries forever.
+          if (err instanceof WhisperNetworkError) throw err;
+          return;
+        }
+        throw err;
+      }
+
+      const amended: typeof entry = {
+        ...entry,
+        corrections: [
+          ...entry.corrections,
+          buildAmendCorrection(
+            { transcript: result, entities: extractEntities(result.text) },
+            config.deviceId,
+            "Whisper transcription completed after reconnect",
+            { kind: "model", engine: result.engine },
+          ),
+        ],
+      };
+      await putEntry(amended);
+      await enqueueEntryForSync(amended.id);
       return;
     }
     case "download_manifest":

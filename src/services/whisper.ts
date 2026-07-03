@@ -11,6 +11,20 @@ export class WhisperApiError extends Error {
 }
 
 /**
+ * Thrown when the fetch to OpenAI never reached the network — the device is
+ * offline, DNS failed, the connection dropped, etc. Distinct from a HTTP 4xx/5xx
+ * response (WhisperApiError) because those are permanent/config problems, not
+ * coverage problems. The caller uses this to queue a retry for when the boat is
+ * back in cell range rather than giving up on the transcript forever.
+ */
+export class WhisperNetworkError extends Error {
+  constructor(message = "Could not reach the Whisper API.") {
+    super(message);
+    this.name = "WhisperNetworkError";
+  }
+}
+
+/**
  * Opt-in transcription upgrade (see config/schema.ts: Phase 1 default is
  * Web Speech, this is the Settings-screen upgrade path). The key never
  * leaves the browser except in this one direct call to OpenAI — no
@@ -27,11 +41,20 @@ export async function transcribeWithWhisper(
   form.append("model", "whisper-1");
   if (language) form.append("language", language);
 
-  const res = await fetch("https://api.openai.com/v1/audio/transcriptions", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${apiKey}` },
-    body: form,
-  });
+  let res: Response;
+  try {
+    res = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}` },
+      body: form,
+    });
+  } catch {
+    // fetch() only throws when it couldn't complete the request at the
+    // transport layer — exactly the offline-at-sea case. A reachable server
+    // that returns an error status still resolves normally and is handled
+    // below as a WhisperApiError.
+    throw new WhisperNetworkError("Could not reach the Whisper API — will retry when online.");
+  }
 
   if (!res.ok) {
     const body = await res.text().catch(() => "");

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { syncNow } from "../../core/sync/sync-engine";
 import { pendingJobCount, failedJobCount } from "../../core/sync/queue";
 import { useOfflineStatus } from "./useOfflineStatus";
+import { useDeckBossStore } from "../../state/store";
 import type { SyncStatus } from "../../core/sync/types";
 import { recordSyncAttempt, recordSyncFailure } from "../../core/diagnostics";
 
@@ -37,6 +38,10 @@ export function useSync() {
       setStatus("error");
       void recordSyncFailure();
     } finally {
+      // Sync may have appended corrections (e.g. a successful Whisper retry),
+      // pulled remote entries, or changed pending-transcript state — refresh
+      // the in-memory store so the UI reflects the latest effective view.
+      void useDeckBossStore.getState().loadEntries();
       await refreshCounts();
     }
   }, [online, refreshCounts]);
