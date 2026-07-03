@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useDeckBossStore } from "../../state/store";
 import { buildAdapter } from "../../core/storage/registry";
 import { LocalZipAdapter } from "../../core/storage/adapters/local-zip";
+import type { GoogleDriveAdapter } from "../../core/storage/adapters/google-drive";
 import { pushAllLocalEntries } from "../../core/sync/sync-engine";
 import type { StorageBackendId } from "../../core/storage/interface";
 import { getDiagnostics, type Diagnostics } from "../../core/diagnostics";
@@ -56,6 +57,17 @@ export function SettingsScreen() {
         const next = { ...config, storage: { ...config.storage, activeBackend: id } };
         const adapter = await buildAdapter(next);
         await adapter?.authenticate();
+        const authState = (adapter as GoogleDriveAdapter | null)?.getAuthState();
+        if (authState) {
+          next.storage.googleDrive = {
+            ...config.storage.googleDrive,
+            connected: true,
+            accessToken: authState.accessToken,
+            tokenExpiresAt: authState.tokenExpiresAt,
+            refreshToken: null,
+            folderId: null,
+          };
+        }
         await saveConfig(next);
       } else {
         await saveConfig({ ...config, storage: { ...config.storage, activeBackend: id } });

@@ -66,6 +66,11 @@ export class GoogleDriveAuthError extends Error {
   }
 }
 
+export interface GoogleDriveAuthState {
+  accessToken: string;
+  tokenExpiresAt: number;
+}
+
 export class GoogleDriveAdapter implements StorageAdapter {
   readonly id = "google-drive" as const;
   readonly displayName = "Google Drive";
@@ -76,7 +81,23 @@ export class GoogleDriveAdapter implements StorageAdapter {
   private folderIdCache = new Map<string, string>(); // path segment chain -> folder id
   private fileIdCache = new Map<string, string>(); // full path -> file id
 
-  constructor(private clientId: string) {}
+  constructor(
+    private clientId: string,
+    existingToken: GoogleDriveAuthState | null = null,
+  ) {
+    if (existingToken) {
+      this.accessToken = existingToken.accessToken;
+      this.tokenExpiresAt = existingToken.tokenExpiresAt;
+    }
+  }
+
+  /** Returns the current still-valid token, or null if absent/expired. */
+  getAuthState(): GoogleDriveAuthState | null {
+    if (this.accessToken && Date.now() < this.tokenExpiresAt) {
+      return { accessToken: this.accessToken, tokenExpiresAt: this.tokenExpiresAt };
+    }
+    return null;
+  }
 
   async isAuthenticated(): Promise<boolean> {
     return this.accessToken !== null && Date.now() < this.tokenExpiresAt;
