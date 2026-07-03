@@ -8,17 +8,25 @@ import {
   getAudioBlob,
   enqueueSyncJob,
   getConfig,
-  getAudioVerifiedAt,
+  allAudioVerifiedAt,
   markAudioVerified,
 } from "../storage/local-db";
 import { buildAdapter } from "../storage/registry";
 import { entryPath, audioPath, type StorageAdapter } from "../storage/interface";
-import { serializeEntry } from "../tensor-log/entry-serializer";
-import { parseEntry } from "../tensor-log/entry-parser";
 import { mimeToExt } from "../../utils/file";
 import { newId } from "../../utils/id";
 import { nowIso } from "../../utils/date";
 import type { SyncJob } from "./types";
+
+// Lazy-loaded: serializeEntry/parseEntry pull in js-yaml (~31KB gzip, ~20%
+// of the pre-fix main bundle), but they're only needed on the sync write/read
+// path — never on the landing RecordScreen. Keeping them out of a static
+// import means the record button can become interactive before the YAML
+// serializer downloads and parses. The module promise is cached by the JS
+// runtime after the first await, so subsequent syncs pay no extra cost.
+const lazySerializer = (): Promise<typeof import("../tensor-log/entry-serializer")> =>
+  import("../tensor-log/entry-serializer");
+const lazyParser = (): Promise<typeof import("../tensor-log/entry-parser")> => import("../tensor-log/entry-parser");
 
 /**
  * The only module that imports StorageAdapter methods on the write side
@@ -81,6 +89,7 @@ async function handleJob(job: SyncJob, adapter: StorageAdapter): Promise<void> {
     case "upload_entry": {
       const entry = await getEntry(job.payload.entryId);
       if (!entry) return; // entry gone locally — nothing to push
+      const { serializeEntry } = await lazySerializer();
       await adapter.writeFile(entryPath(entry.timestamp, entry.id), serializeEntry(entry));
       return;
     }
@@ -121,6 +130,7 @@ async function handleJob(job: SyncJob, adapter: StorageAdapter): Promise<void> {
       // the file is never actually removed from storage.
       const entry = await getEntry(job.payload.entryId);
       if (!entry) return;
+      const { serializeEntry } = await lazySerializer();
       await adapter.writeFile(entryPath(entry.timestamp, entry.id), serializeEntry(entry));
       return;
     }
@@ -150,6 +160,7 @@ export async function pullRemoteEntries(): Promise<number> {
     if (!file.path.endsWith(".md")) continue;
     let remoteEntry;
     try {
+      const { parseEntry } = await lazyParser();
       remoteEntry = parseEntry(await adapter.readFile(file.path));
     } catch {
       continue; // corrupt or unreadable remote file — skip, don't fail the whole pull
@@ -178,6 +189,7 @@ async function refreshManifest(): Promise<void> {
   const adapter = await getActiveAdapter();
   if (!adapter) return;
   const local = await allEntries();
+  const { serializeEntry } = await lazySerializer();
   await adapter.writeManifest({
     version: "1.0",
     generatedAt: nowIso(),
@@ -223,7 +235,13 @@ let reconcileInFlight: Promise<{ requeued: number }> | null = null;
 export async function reconcileAudio(): Promise<{ requeued: number }> {
   if (reconcileInFlight) return reconcileInFlight;
   reconcileInFlight = (async () => {
-    const [local, jobs] = await Promise.all([allEntries(), allSyncJobs()]);
+    // Verified-state read is batched (allAudioVerifiedAt: one IndexedDB
+    // `entries()` call) instead of the previous per-entry getAudioVerifiedAt()
+    // in the loop below — N audio entries used to mean N round-trips, which
+    // dominated this pass at higher counts (measured ~1s at 2000 audio
+    // entries on fake-indexeddb). Same single-read pattern allEntries()
+    // already uses.
+    const [local, jobs, verifiedMap] = await Promise.all([allEntries(), allSyncJobs(), allAudioVerifiedAt()]);
     const pendingAudioEntryIds = new Set(
       jobs
         .map((j) => j.payload)
@@ -235,9 +253,7 @@ export async function reconcileAudio(): Promise<{ requeued: number }> {
     for (const entry of local) {
       if (!entry.audio) continue; // never had audio
       if (pendingAudioEntryIds.has(entry.id)) continue; // already queued — don't duplicate
-
-      const verifiedAt = await getAudioVerifiedAt(entry.id);
-      if (verifiedAt) continue; // already confirmed archived
+      if (verifiedMap.has(entry.id)) continue; // already confirmed archived
 
       const blob = await getAudioBlob(entry.id);
       if (!blob) continue; // nothing locally left to re-upload

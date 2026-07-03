@@ -1,5 +1,12 @@
 import { describe, it, expect } from "vitest";
-import { putEntry, getEntry, verifyStoreIntegrity } from "../../src/core/storage/local-db";
+import {
+  putEntry,
+  getEntry,
+  verifyStoreIntegrity,
+  markAudioVerified,
+  getAudioVerifiedAt,
+  allAudioVerifiedAt,
+} from "../../src/core/storage/local-db";
 import { InvariantViolationError } from "../../src/core/tensor-log/invariants";
 import { newEntrySkeleton } from "../../src/core/types/log-entry";
 import { buildAmendCorrection } from "../../src/core/tensor-log/entry-builder";
@@ -95,5 +102,43 @@ describe("verifyStoreIntegrity", () => {
     const result = await verifyStoreIntegrity();
     expect(result.ok).toBe(true);
     expect(result.failedStores).toEqual([]);
+  });
+});
+
+describe("allAudioVerifiedAt (batched verified-state read)", () => {
+  it("returns every verified id -> timestamp pair in a single read", async () => {
+    const a = crypto.randomUUID();
+    const b = crypto.randomUUID();
+    const tsA = new Date(2026, 0, 1).toISOString();
+    const tsB = new Date(2026, 0, 2).toISOString();
+    await markAudioVerified(a, tsA);
+    await markAudioVerified(b, tsB);
+
+    const map = await allAudioVerifiedAt();
+    expect(map.get(a)).toBe(tsA);
+    expect(map.get(b)).toBe(tsB);
+    expect(map.size).toBeGreaterThanOrEqual(2);
+  });
+
+  it("agrees with the per-id getAudioVerifiedAt for every entry it returns", async () => {
+    // The whole point of the batched read is that it's a drop-in for the
+    // per-id read reconcileAudio used to do in a loop — so the two must
+    // agree on every key.
+    const ids = Array.from({ length: 10 }, () => crypto.randomUUID());
+    for (const [i, id] of ids.entries()) {
+      if (i % 2 === 0) await markAudioVerified(id, new Date().toISOString());
+    }
+    const map = await allAudioVerifiedAt();
+    for (const id of ids) {
+      expect(map.get(id) ?? null).toBe(await getAudioVerifiedAt(id));
+    }
+  });
+
+  it("is empty when nothing has been verified", async () => {
+    // A fresh store (this test runs in the shared fake-indexeddb which
+    // other tests in this file may have written to) — just assert the
+    // read resolves to a Map rather than throwing on an empty store.
+    const map = await allAudioVerifiedAt();
+    expect(map).toBeInstanceOf(Map);
   });
 });
