@@ -2,6 +2,7 @@ import { get, set, del, keys, createStore, type UseStore } from "idb-keyval";
 import { LogEntrySchema, type LogEntry } from "../types/log-entry";
 import { AppConfigSchema, defaultAppConfig, type AppConfig } from "../../config/schema";
 import { SyncJobSchema, type SyncJob } from "../sync/types";
+import { assertWriteIsAdditive } from "../tensor-log/invariants";
 
 /**
  * The local-only persistence layer (dev guide §4.1: "IndexedDB via
@@ -36,6 +37,12 @@ const CONFIG_KEY = "app-config";
 
 export async function putEntry(entry: LogEntry): Promise<void> {
   LogEntrySchema.parse(entry); // throws on shape drift — catch bugs at the write, not the read
+  const existing = await get<LogEntry>(entry.id, entryStore);
+  // The one invariant the whole product's trustworthiness rests on:
+  // committed entries are never mutated, only appended to. Enforced here,
+  // in the single write path, regardless of whether the caller is the UI
+  // (amend/retract) or sync-engine (pulling and merging a remote copy).
+  assertWriteIsAdditive(existing, entry);
   await set(entry.id, entry, entryStore);
 }
 
@@ -114,4 +121,42 @@ export async function allSyncJobs(): Promise<SyncJob[]> {
     .map((v) => SyncJobSchema.safeParse(v))
     .filter((r): r is { success: true; data: SyncJob } => r.success)
     .map((r) => r.data);
+}
+
+// ---- Startup integrity check --------------------------------------------
+
+export interface StoreIntegrityResult {
+  ok: boolean;
+  failedStores: string[];
+}
+
+/**
+ * Verifies every object store this app depends on is actually queryable.
+ * Exists because of a real shipped bug: four stores used to share one
+ * IndexedDB database name, so three of four silently never got created,
+ * and every read/write against them threw "object store was not found" —
+ * with no visible symptom beyond a confusing "Sync failed" banner and a
+ * Timeline stuck on "Loading…" forever. That failure mode (a season of
+ * a fisherman's records silently gone) is the worst-case outcome this
+ * product has; this check exists so it fails loudly, once, at launch,
+ * instead of quietly breaking every write from then on. Call once from
+ * App.tsx on mount.
+ */
+export async function verifyStoreIntegrity(): Promise<StoreIntegrityResult> {
+  const stores: [string, UseStore][] = [
+    ["entries", entryStore],
+    ["audio", audioStore],
+    ["meta", metaStore],
+    ["sync-queue", syncQueueStore],
+  ];
+
+  const failedStores: string[] = [];
+  for (const [name, store] of stores) {
+    try {
+      await keys(store);
+    } catch {
+      failedStores.push(name);
+    }
+  }
+  return { ok: failedStores.length === 0, failedStores };
 }

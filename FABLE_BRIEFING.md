@@ -136,10 +136,12 @@ everything else gets normal, lighter review.
 
 **Red-team's findings, which genuinely conflict with parts of the above
 and should not be waved away**:
-- The most likely collapse point in the whole roadmap is Phase 2's
+- The most likely collapse point in the whole roadmap is Phase 3's
   sensor/camera/ML work — that's a different engineering discipline
   (computer vision, hardware abstraction, device fragmentation) wearing
   the same UI, not a natural extension of a voice notes app.
+  (Corrected from an earlier draft that mislabeled this as Phase 2 — Fable
+  caught it. Left as a visible correction rather than a silent edit.)
 - "Multi-trade" is a modeling trap as much as an opportunity: fishing
   catch data has a natural schema; generalizing the entity model to serve
   farming or SAR logs too risks turning the audit-friendly event schema

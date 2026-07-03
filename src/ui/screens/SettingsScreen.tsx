@@ -161,6 +161,9 @@ export function SettingsScreen() {
       <div className="settings-section">
         <h2>ABOUT</h2>
         <p style={{ fontSize: 13, opacity: 0.6 }}>DeckBoss 0.1.0 · PurplePincher.org</p>
+        <p style={{ fontSize: 12, opacity: 0.5, marginTop: 4 }}>
+          Personal log only — not a substitute for official or regulatory catch reporting.
+        </p>
       </div>
     </div>
   );

@@ -14,20 +14,29 @@ import { isoDateString, uuidV4, SCHEMA_VERSION } from "./common";
  *
  * DIVERGENCE FROM THE PHASE 1 DEV GUIDE, DELIBERATE:
  * The guide's §9.3 UI has direct [Edit] [Delete] buttons that imply mutating
- * or removing the file in place. That contradicts a principle already
- * written into this project's foundation docs (activelog-spec: "No editing.
- * Ever. Corrections are events, history is never rewritten — vital for
- * training data provenance and trust") and undercuts Phase 4's regulatory
- * compliance goal (§14: "Auto-generate catch reports, trip logs for
- * authorities") — a directly-editable, last-write-wins log has no
- * evidentiary value.
+ * or removing the file in place, with last-write-wins conflict resolution.
+ * That contradicts a principle already written into this project's
+ * foundation docs (activelog-spec: "No editing. Ever. Corrections are
+ * events, history is never rewritten — vital for training data provenance
+ * and trust") — and more concretely, last-write-wins silently drops data
+ * whenever two devices edit the same entry before syncing.
  *
  * So: `retracted` and `corrections` are additive. "Delete" sets
  * retracted=true instead of removing the file. "Edit" appends a Correction
  * instead of overwriting a field. The *effective* entry (what the UI shows)
  * is computed at read time by applyCorrections() in entry-builder.ts — the
  * on-disk record never loses information. This costs two extra fields and
- * one read-time fold; it buys back everything Phase 4 needs later.
+ * one read-time fold; it buys back conflict-free offline sync (see
+ * conflict-resolver.ts — two devices' corrections just union, they never
+ * conflict) and a write-path invariant that's cheap to enforce mechanically
+ * (see invariants.ts) rather than something every future contributor has
+ * to remember to preserve by convention.
+ *
+ * This is NOT justified by, or a claim toward, regulatory/compliance
+ * evidentiary value — see the README's disclaimer. That would be a real
+ * feature with real requirements (chain of custody, legal review, retention
+ * policy) that nobody has decided to pursue. The design earns its keep on
+ * sync-safety grounds alone.
  */
 
 export const GPSSourceSchema = z.enum(["gps", "network", "unknown"]);

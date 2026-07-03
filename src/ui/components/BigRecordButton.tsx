@@ -58,7 +58,11 @@ export function BigRecordButton({
           suppressNextClickRef.current = false;
           return;
         }
-        recording ? onStop() : onStart();
+        if (recording) {
+          onStop();
+        } else {
+          onStart();
+        }
       }}
       onPointerDown={() => {
         if (!recording) return;

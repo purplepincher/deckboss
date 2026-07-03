@@ -73,9 +73,16 @@ know a shape that isn't declared in one of these:
 ## Deliberate divergences from the Phase 1 dev guide
 
 1. **Additive corrections, not in-place edit/delete.** See the doc comment
-   at the top of `src/core/types/log-entry.ts`. Costs two extra fields and a
-   read-time fold; keeps Phase 4's regulatory-compliance goal viable without
-   a rewrite.
+   at the top of `src/core/types/log-entry.ts`. The real justification is
+   point 3 below: because edits are additive, two devices editing the same
+   entry never conflict, only merge — this is what makes offline sync
+   trivially safe instead of needing last-write-wins or manual merge UI.
+   (An earlier version of this doc justified it by "keeps Phase 4's
+   regulatory-compliance goal viable" — that's backwards: a design choice
+   shouldn't be justified by a future business goal nobody has actually
+   decided to pursue. See the README's disclaimer — this project isn't
+   claiming to be evidence-grade for licensing or compliance, and the
+   corrections model would be worth keeping even if it never is.)
 2. **Web Speech API is the default transcription engine, Whisper is opt-in.**
    See `defaultAppConfig()` in `src/config/schema.ts`. The guide's stated
    default (Whisper-first) requires an OpenAI key before a beta tester's

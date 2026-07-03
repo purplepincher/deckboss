@@ -1,0 +1,16 @@
+# Audit-log core — the one invariant this product's trustworthiness rests
+# on is that a committed entry is never mutated, only appended to (see
+# src/core/tensor-log/invariants.ts and FABLE_BRIEFING.md decision 4a).
+# Changes to these files need explicit review, even from the sole
+# maintainer working alone — treat a PR here as "did I just weaken the one
+# guarantee everything else depends on."
+/src/core/types/log-entry.ts           @SuperInstance
+/src/core/tensor-log/entry-builder.ts  @SuperInstance
+/src/core/tensor-log/invariants.ts     @SuperInstance
+/src/core/storage/local-db.ts          @SuperInstance
+/src/core/sync/conflict-resolver.ts    @SuperInstance
+
+# Everything else in the repo gets normal review — this file is
+# deliberately short. See FABLE_BRIEFING.md's collaboration-model notes:
+# audit-log-level rigor applied project-wide is exactly the kind of
+# friction that drives volunteer contributors away.

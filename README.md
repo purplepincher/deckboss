@@ -13,6 +13,13 @@ together, and [SAFETY.md](../cocapn-foundation) (in the sibling `cocapn-foundati
 repo) for the longer-horizon autopilot research this project deliberately does
 *not* touch in Phase 1.
 
+**DeckBoss is a personal log, not a substitute for official or regulatory
+catch reporting.** The additive-corrections design (see below) exists
+because it makes offline sync conflict-safe, not because this has been
+reviewed or certified as evidence-grade for licensing or compliance
+purposes — it hasn't. Don't rely on it for anything a regulator or insurer
+needs to accept as authoritative.
+
 ## Status
 
 Phase 1 MVP — see the roadmap in project history. Working today:
