@@ -12,7 +12,7 @@ import {
   markAudioVerified,
 } from "../storage/local-db";
 import { buildAdapter } from "../storage/registry";
-import { entryPath, audioPath, type StorageAdapter } from "../storage/interface";
+import { entryPath, audioPath, type StorageAdapter, type FileMetadata } from "../storage/interface";
 import { mimeToExt } from "../../utils/file";
 import { newId } from "../../utils/id";
 import { nowIso } from "../../utils/date";
@@ -190,18 +190,44 @@ async function refreshManifest(): Promise<void> {
   if (!adapter) return;
   const local = await allEntries();
   const { serializeEntry } = await lazySerializer();
+  const localFiles: FileMetadata[] = local.map((e) => ({
+    path: entryPath(e.timestamp, e.id),
+    // Real byte size of the serialized file, not a placeholder — a
+    // multi-model review round caught this hardcoded at 0, which makes
+    // FileMetadata.size useless for anything that might one day want it
+    // (bandwidth estimates, storage-quota warnings).
+    size: new Blob([serializeEntry(e)]).size,
+    modifiedAt: e.timestamp,
+  }));
+
+  // Union with whatever the remote manifest already lists, rather than
+  // replacing it outright — a research pass found this was a live
+  // discovery bug the moment the adapter-caching fix made real
+  // multi-device sync actually work: refreshManifest() runs *before*
+  // pullRemoteEntries() in syncNow()'s order, so at write time `local`
+  // only reflects what THIS device already had before this sync's pull.
+  // If another device uploaded entries since this device's last pull, a
+  // blind overwrite here would drop them from the manifest — the .md
+  // files would still exist in storage, but pullRemoteEntries() has no
+  // other way to discover them. Two devices sharing one bucket could
+  // each silently un-list the other's uploads on every sync.
+  let remoteFiles: FileMetadata[] = [];
+  try {
+    remoteFiles = (await adapter.getManifest()).entries;
+  } catch {
+    // no existing manifest yet (first sync ever, or backend that throws
+    // on a missing file rather than returning empty) — local-only is
+    // correct in that case, nothing to union with.
+  }
+
+  const merged = new Map<string, FileMetadata>();
+  for (const f of remoteFiles) merged.set(f.path, f);
+  for (const f of localFiles) merged.set(f.path, f); // this device's own view of its entries is the freshest for those paths
+
   await adapter.writeManifest({
     version: "1.0",
     generatedAt: nowIso(),
-    entries: local.map((e) => ({
-      path: entryPath(e.timestamp, e.id),
-      // Real byte size of the serialized file, not a placeholder — a
-      // multi-model review round caught this hardcoded at 0, which makes
-      // FileMetadata.size useless for anything that might one day want it
-      // (bandwidth estimates, storage-quota warnings).
-      size: new Blob([serializeEntry(e)]).size,
-      modifiedAt: e.timestamp,
-    })),
+    entries: [...merged.values()],
   });
 }
 

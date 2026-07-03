@@ -5,9 +5,10 @@ import {
   syncNow,
   reconcileAudio,
   verifyRemoteBlob,
+  pushAllLocalEntries,
 } from "../../src/core/sync/sync-engine";
 import { allSyncJobs, setConfig, putAudioBlob, getAudioVerifiedAt, putEntry } from "../../src/core/storage/local-db";
-import { clearAdapterCache } from "../../src/core/storage/registry";
+import { clearAdapterCache, buildAdapter } from "../../src/core/storage/registry";
 import { defaultAppConfig } from "../../src/config/schema";
 import { newEntrySkeleton } from "../../src/core/types/log-entry";
 import type { StorageAdapter, FileMetadata, Manifest } from "../../src/core/storage/interface";
@@ -240,5 +241,47 @@ describe("syncNow: reconciliation is part of the regular sync cycle", () => {
     await syncNow();
 
     expect(await getAudioVerifiedAt(entry.id)).not.toBeNull();
+  });
+});
+
+describe("refreshManifest: does not blow away another device's uploads", () => {
+  beforeEach(async () => {
+    clearAdapterCache();
+    await setConfig({ ...defaultAppConfig(), storage: { activeBackend: "local-zip" } });
+  });
+
+  it("unions with the existing remote manifest instead of replacing it wholesale", async () => {
+    // Simulates the exact race a research pass found: another device
+    // ("device B") already wrote an entry to the same shared backend and
+    // its manifest entry is sitting there — but this device hasn't
+    // pulled it into its own local IndexedDB yet. Before the fix,
+    // refreshManifest() (called from pushAllLocalEntries(), which runs
+    // before pullRemoteEntries() in syncNow()'s order) would overwrite
+    // the manifest with only what THIS device knows about, silently
+    // un-listing device B's entry — the .md file would still exist in
+    // storage, just no longer discoverable via the manifest.
+    const config = { ...defaultAppConfig(), storage: { activeBackend: "local-zip" as const } };
+    const adapter = await buildAdapter(config);
+    await adapter?.writeManifest({
+      version: "1.0",
+      generatedAt: new Date().toISOString(),
+      entries: [{ path: "DeckBoss/2026/01/01/from-device-b.md", size: 123, modifiedAt: new Date().toISOString() }],
+    });
+
+    const localEntry = newEntrySkeleton({
+      id: crypto.randomUUID(),
+      timestamp: new Date().toISOString(),
+      gps: null,
+      audio: null,
+      source: "voice",
+    });
+    await putEntry(localEntry);
+
+    await pushAllLocalEntries();
+
+    const manifest = await adapter?.getManifest();
+    const paths = manifest?.entries.map((e) => e.path) ?? [];
+    expect(paths).toContain("DeckBoss/2026/01/01/from-device-b.md");
+    expect(paths.some((p) => p.includes(localEntry.id))).toBe(true);
   });
 });
