@@ -1,3 +1,4 @@
+node_modules
 node_modules/
 dist/
 dev-dist/
@@ -13,3 +14,19 @@ npm-debug.log*
 coverage/
 test-results/
 playwright-report/
+
+# Scratch briefs/summaries written by delegated agent sessions (kimi/aider
+# worktrees) — meant to be read once and discarded, never permanent repo
+# content. Two of these ended up committed by accident this session (one
+# because a task brief didn't say "don't commit," one from an over-broad
+# `git add -A`) — this is the actual fix, not just more careful add calls.
+KIMI_TASK.md
+KIMI_SUMMARY.md
+KIMI_WORKSHOP_NOTES.md
+AIDER_TASK*.md
+AIDER_SUMMARY.md
+AIDER_CONFLICT_AUDIT_SUMMARY.md
+FABLE_NEXT_PROMPT.md
+*-run.log
+*-audit.log
+*-audit-retry.log
