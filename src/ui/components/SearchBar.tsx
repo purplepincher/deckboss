@@ -4,6 +4,11 @@ export interface SearchFilters {
   text: string;
   dateRange: "all" | "today" | "week";
   entityType: EntityType | "all";
+  // Off by default so retracted entries stay out of the way in normal use
+  // (mirrors query-engine's own `includeRetracted` default of false) — this
+  // is the only UI control that can ever flip it on, since a retracted
+  // entry otherwise has no discoverable path back into view.
+  showRetracted: boolean;
 }
 
 const ENTITY_OPTIONS: { value: EntityType | "all"; label: string }[] = [
@@ -51,6 +56,14 @@ export function SearchBar({
           ))}
         </select>
       </div>
+      <label className="search-retracted-toggle">
+        <input
+          type="checkbox"
+          checked={filters.showRetracted}
+          onChange={(e) => onChange({ ...filters, showRetracted: e.target.checked })}
+        />
+        Show retracted
+      </label>
     </div>
   );
 }
