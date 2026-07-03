@@ -1,5 +1,9 @@
 # DeckBoss
 
+[![Deploy to GitHub Pages](https://github.com/purplepincher/deckboss/actions/workflows/deploy-pages.yml/badge.svg)](https://github.com/purplepincher/deckboss/actions/workflows/deploy-pages.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
+[![Live app](https://img.shields.io/badge/live-purplepincher.github.io%2Fdeckboss-blue)](https://purplepincher.github.io/deckboss/)
+
 Voice-first digital fishing logbook. Local-first, your storage, your data.
 
 > Tap to record. Every note gets a timestamp and GPS fix automatically.

@@ -1,0 +1,35 @@
+name: Bug report
+description: Something didn't work the way it should have.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        No template fields are required here — a one-line issue that says
+        "recorded a note on the dock, it never showed up in the log" is
+        genuinely useful on its own. Fill in what you can.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, what actually happened?
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics export (if you have it)
+      description: >
+        In the app: Settings → Support → "Export everything". Attach the
+        downloaded .zip here, or paste the contents of diagnostics.json
+        from inside it. Not required, but it usually explains more than a
+        description can.
+    validations:
+      required: false
+  - type: input
+    id: device
+    attributes:
+      label: Device / browser (if known)
+      placeholder: "e.g. iPhone 14, Safari"
+    validations:
+      required: false

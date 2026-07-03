@@ -1,0 +1,21 @@
+name: Feature idea
+description: Something you wish DeckBoss did.
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: What's the idea?
+      description: What would this let you do that you can't do today?
+    validations:
+      required: true
+  - type: markdown
+    attributes:
+      value: |
+        Worth knowing before you file: check `ROADMAP.md` first — it's the
+        living decision record, including things deliberately *not* being
+        built right now and why (e.g. anything requiring a backend server,
+        which conflicts with this project's local-first/no-backend
+        promise). If your idea runs into one of those constraints, it's
+        still worth filing — just flag that you've seen the constraint and
+        say why you think it's worth revisiting.

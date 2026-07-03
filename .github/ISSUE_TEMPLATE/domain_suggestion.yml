@@ -1,0 +1,26 @@
+name: Fishing/domain suggestion
+description: A species, gear term, or fishing-domain detail that's wrong or missing. No code required.
+labels: ["domain"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This is the lane for working fishermen, not just developers — your
+        domain knowledge is worth more here than code would be. Plain
+        language is fine.
+  - type: textarea
+    id: suggestion
+    attributes:
+      label: What's wrong or missing?
+      description: >
+        E.g. "the app doesn't recognize [species/gear term]", or "the
+        regulatory detail in X is out of date."
+    validations:
+      required: true
+  - type: input
+    id: region
+    attributes:
+      label: Region / fishery (if relevant)
+      placeholder: "e.g. Pacific Northwest salmon troll"
+    validations:
+      required: false

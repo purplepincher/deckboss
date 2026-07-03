@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Contributing guide
+    url: https://github.com/purplepincher/deckboss/blob/main/CONTRIBUTING.md
+    about: Three lanes depending on what you want to do — bug, domain suggestion, or code.
+  - name: Captain's guide
+    url: https://github.com/purplepincher/deckboss/blob/main/docs/USER_GUIDE.md
+    about: If you're just trying to use the app, start here before filing an issue.
