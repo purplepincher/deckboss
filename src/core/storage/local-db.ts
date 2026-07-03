@@ -1,5 +1,6 @@
-import { get, set, del, keys, createStore, type UseStore } from "idb-keyval";
+import { get, set, del, keys, values, createStore, type UseStore } from "idb-keyval";
 import { LogEntrySchema, type LogEntry } from "../types/log-entry";
+import { SCHEMA_VERSION } from "../types/common";
 import { AppConfigSchema, defaultAppConfig, type AppConfig } from "../../config/schema";
 import { SyncJobSchema, type SyncJob } from "../sync/types";
 import { assertWriteIsAdditive } from "../tensor-log/invariants";
@@ -50,16 +51,50 @@ export async function getEntry(id: string): Promise<LogEntry | undefined> {
   return get(id, entryStore);
 }
 
+/**
+ * Fast-path guard for entries written by this version of the app.
+ * `putEntry()` already runs the full Zod schema on write, so on read we can
+ * trust records whose `version` matches the current schema version and whose
+ * shape looks right. This avoids the O(n) Zod re-parse that showed up in
+ * beta profiling at ~800 entries. Anything with a mismatched/missing version
+ * or an unexpected shape falls back to `LogEntrySchema.safeParse()` so corrupt
+ * records are still skipped rather than crashing downstream.
+ */
+function isCurrentLogEntry(v: unknown): v is LogEntry {
+  if (typeof v !== "object" || v === null) return false;
+  const e = v as Record<string, unknown>;
+  return (
+    e.version === SCHEMA_VERSION &&
+    typeof e.id === "string" &&
+    typeof e.timestamp === "string" &&
+    Array.isArray(e.corrections) &&
+    typeof e.source === "string" &&
+    Array.isArray(e.entities) &&
+    Array.isArray(e.tags) &&
+    typeof e.thread_id === "string" &&
+    (e.gps === null || typeof e.gps === "object") &&
+    (e.audio === null || typeof e.audio === "object") &&
+    (e.transcript === null || typeof e.transcript === "object")
+  );
+}
+
 export async function allEntries(): Promise<LogEntry[]> {
-  const ks = await keys(entryStore);
-  const vals = await Promise.all(ks.map((k) => get(k, entryStore)));
+  // Read every value in a single readonly transaction. The previous
+  // per-key `get()` loop created a transaction for each record; at 800+
+  // entries that overhead dominated the Timeline load in addition to the
+  // Zod re-parse this function used to run unconditionally.
+  const vals = await values<unknown>(entryStore);
   const out: LogEntry[] = [];
   for (const v of vals) {
-    const result = LogEntrySchema.safeParse(v);
-    if (result.success) {
-      out.push(result.data);
+    if (isCurrentLogEntry(v)) {
+      out.push(v);
     } else {
-      console.warn("Skipping corrupt local entry", v, result.error);
+      const result = LogEntrySchema.safeParse(v);
+      if (result.success) {
+        out.push(result.data);
+      } else {
+        console.warn("Skipping corrupt local entry", v, result.error);
+      }
     }
   }
   return out;
