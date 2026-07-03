@@ -26,8 +26,6 @@ export interface S3CompatibleConfig {
  */
 export abstract class S3CompatibleAdapter implements StorageAdapter {
   abstract readonly id: StorageBackendId;
-  abstract readonly displayName: string;
-  abstract readonly icon: string;
 
   private client: S3Client;
   private verified = false;

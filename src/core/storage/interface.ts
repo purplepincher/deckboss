@@ -47,8 +47,6 @@ export type Manifest = z.infer<typeof ManifestSchema>;
 
 export interface StorageAdapter {
   readonly id: StorageBackendId;
-  readonly displayName: string;
-  readonly icon: string; // emoji or SVG path, rendered in SettingsScreen
 
   // Authentication
   isAuthenticated(): Promise<boolean>;

@@ -17,8 +17,6 @@ import { MANIFEST_PATH } from "../interface";
  */
 export class LocalZipAdapter implements StorageAdapter {
   readonly id = "local-zip" as const;
-  readonly displayName = "Local Export (.zip)";
-  readonly icon = "📦";
 
   private files = new Map<string, string>();
   private blobs = new Map<string, Blob>();

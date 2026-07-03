@@ -68,8 +68,6 @@ export class GoogleDriveAuthError extends Error {
 
 export class GoogleDriveAdapter implements StorageAdapter {
   readonly id = "google-drive" as const;
-  readonly displayName = "Google Drive";
-  readonly icon = "🗂️";
 
   private accessToken: string | null = null;
   private tokenExpiresAt = 0;
