@@ -203,3 +203,59 @@ killed, but it's a quarter-scale bet, not a week-scale one.
 Google Drive OAuth in Testing mode caps at 100 users before Google
 requires app verification. Fine for a small field beta; worth knowing
 about before recruiting gets close to that number.
+
+## Iteration-1 multi-method beta test
+
+A follow-up round used four genuinely different QA methods in parallel
+instead of repeating the same Playwright-click-around script: a Lighthouse
+audit, cross-browser engine testing (Firefox + WebKit, approximating
+Safari/iOS), a stress/scale + rapid-interaction test, and a security
+review. All four ran against the live deployment, not the source.
+
+**Fixed as a direct result:**
+- **CSP added** (script-src/object-src/base-uri locked down;
+  connect-src deliberately unrestricted — BYOK storage needs arbitrary
+  S3-compatible endpoints) and **credential entry moved from unmasked
+  `prompt()` dialogs to real password-masked form fields** — security
+  review findings, neither a live vulnerability but both real hardening
+  gaps.
+- **Main bundle cut from 195.5KB to 94.5KB gzipped** by dynamic-importing
+  the storage adapters (`@aws-sdk/client-s3` and `jszip` were shipping to
+  every session even though most never touch R2/Oracle or ZIP export) and
+  lazy-loading every screen except the Record landing route, plus
+  deferring service-worker registration — a Lighthouse audit found Total
+  Blocking Time of 1540ms on throttled mobile CPU, a real problem for an
+  app whose whole pitch is a tap landing correctly on the first try.
+- **Self-inflicted CSP regression caught and fixed within the same
+  session**: the CSP above shipped without `media-src`, silently breaking
+  audio playback (blob: URLs fell back to default-src 'self'). Two
+  independent agents (stress-test and cross-browser, working separately)
+  both caught it within minutes. Fixed by adding `media-src 'self' blob:`.
+
+**Found, deliberately not fixed:**
+- Near-zero-length recordings (a 167ms tap-to-stop) save a mostly-empty
+  entry rather than being discarded. Leaving this alone on purpose —
+  silently dropping a capture because it looked accidental would
+  contradict the same "never lose a capture" principle defended
+  everywhere else in this codebase. The existing Retract flow already
+  covers "delete this, it was a mistake."
+- Timeline render time drifts to 1.5-3s at ~800 entries (vs. near-instant
+  at smaller counts) — not broken, list stays responsive once loaded
+  (pagination keeps rendered DOM nodes low regardless of total count),
+  but worth profiling if real usage grows past a season's worth of
+  entries. Likely the Zod-validation pass in `allEntries()` running
+  against every stored record on load.
+
+**Confirmed, not yet resolved — matches Fable's flagged risk exactly:**
+Cross-browser testing found Web Speech API absent on both Firefox and
+WebKit (as expected), and additionally found `window.MediaRecorder`
+undefined in the WebKit build under test. Important caveat before reading
+too much into that second finding: the WebKit engine had to be manually
+patched together from individually-extracted system packages to run in
+this sandbox at all (no sudo, missing ~238 dependencies, broken TLS until
+a GIO module was manually wired in) — that's a fragile, non-standard
+build, not real Safari, and Safari has supported MediaRecorder since 2021
+on both macOS and iOS. Treat this as inconclusive, not confirmation that
+real iPhones can't record. The device census and hands-on setup session
+with actual field testers' phones (see above) is still the only way to
+actually resolve this.
