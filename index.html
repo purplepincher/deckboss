@@ -8,6 +8,27 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#0a1628" />
     <meta name="description" content="DeckBoss — your boat's memory. Your data. Your shell." />
+    <!--
+      Defense-in-depth against script injection, not a primary defense
+      (React already escapes rendered text). GitHub Pages can't set
+      response headers, so this is the meta-tag form, which means
+      frame-ancestors/report-uri can't be set here at all (spec
+      disallows them outside a header) — acceptable, since a static
+      client-only app with no session/cookie state has little for a
+      clickjacking attack to actually do.
+
+      connect-src is deliberately left unrestricted: this app's entire
+      storage model is BYOK against arbitrary S3-compatible endpoints
+      the user types in themselves (Cloudflare R2, Oracle, or a
+      self-hosted MinIO on literally any domain) — a locked-down
+      allowlist would silently break that for any endpoint not already
+      known about, which is worse than the marginal protection a
+      tighter connect-src would add here.
+    -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; object-src 'none'; base-uri 'self'; connect-src *;"
+    />
     <link rel="icon" href="/icons/icon-192x192.png" />
     <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
     <title>DeckBoss</title>

@@ -22,6 +22,17 @@ export function SettingsScreen() {
   const [busy, setBusy] = useState<string | null>(null);
   const [diagnostics, setDiagnostics] = useState<Diagnostics | null>(null);
   const [persisted, setPersisted] = useState<boolean | null>(null);
+  // Which S3-compatible backend's credential form is open, if any — replaces
+  // sequential prompt() dialogs (a security review flagged those as
+  // unmasked and potentially visible in autofill/history; low risk since
+  // credentials never leave the browser, but cheap to fix properly).
+  const [openForm, setOpenForm] = useState<"cloudflare-r2" | "oracle-oci" | null>(null);
+  const [formFields, setFormFields] = useState({
+    endpoint: "",
+    bucket: "",
+    accessKeyId: "",
+    secretAccessKey: "",
+  });
 
   useEffect(() => {
     if (!configLoaded) void loadConfig();
@@ -33,25 +44,15 @@ export function SettingsScreen() {
   }, []);
 
   const connect = async (id: StorageBackendId) => {
+    if (id === "cloudflare-r2" || id === "oracle-oci") {
+      setFormFields({ endpoint: "", bucket: "", accessKeyId: "", secretAccessKey: "" });
+      setOpenForm(id);
+      return;
+    }
+
     setBusy(id);
     try {
-      if (id === "cloudflare-r2" || id === "oracle-oci") {
-        const endpoint = prompt("Endpoint URL") ?? "";
-        const bucket = prompt("Bucket name") ?? "";
-        const accessKeyId = prompt("Access key ID") ?? "";
-        const secretAccessKey = prompt("Secret access key") ?? "";
-        if (!endpoint || !bucket || !accessKeyId || !secretAccessKey) return;
-
-        const next = { ...config, storage: { ...config.storage, activeBackend: id } };
-        if (id === "cloudflare-r2") {
-          next.storage.cloudflareR2 = { endpoint, bucket, accessKeyId, secretAccessKey };
-        } else {
-          next.storage.oracleOci = { endpoint, bucket, accessKeyId, secretAccessKey };
-        }
-        const adapter = buildAdapter(next);
-        await adapter?.authenticate();
-        await saveConfig(next);
-      } else if (id === "google-drive") {
+      if (id === "google-drive") {
         const next = { ...config, storage: { ...config.storage, activeBackend: id } };
         const adapter = buildAdapter(next);
         await adapter?.authenticate();
@@ -59,6 +60,30 @@ export function SettingsScreen() {
       } else {
         await saveConfig({ ...config, storage: { ...config.storage, activeBackend: id } });
       }
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Could not connect.");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const submitS3Form = async (id: "cloudflare-r2" | "oracle-oci") => {
+    const { endpoint, bucket, accessKeyId, secretAccessKey } = formFields;
+    if (!endpoint || !bucket || !accessKeyId || !secretAccessKey) return;
+
+    setBusy(id);
+    try {
+      const next = { ...config, storage: { ...config.storage, activeBackend: id } };
+      if (id === "cloudflare-r2") {
+        next.storage.cloudflareR2 = { endpoint, bucket, accessKeyId, secretAccessKey };
+      } else {
+        next.storage.oracleOci = { endpoint, bucket, accessKeyId, secretAccessKey };
+      }
+      const adapter = buildAdapter(next);
+      await adapter?.authenticate();
+      await saveConfig(next);
+      setOpenForm(null);
+      setFormFields({ endpoint: "", bucket: "", accessKeyId: "", secretAccessKey: "" });
     } catch (err) {
       alert(err instanceof Error ? err.message : "Could not connect.");
     } finally {
@@ -100,21 +125,67 @@ export function SettingsScreen() {
         <h2>STORAGE</h2>
         {BACKENDS.map((b) => {
           const active = config.storage.activeBackend === b.id;
+          // A plain const (not a `b.id` property access) so the narrowed
+          // literal type actually survives into the onClick closures below
+          // — TS doesn't retain narrowing on object property access across
+          // a nested function scope, only on local variable bindings.
+          const s3Id: "cloudflare-r2" | "oracle-oci" | null =
+            b.id === "cloudflare-r2" || b.id === "oracle-oci" ? b.id : null;
           return (
-            <div className="settings-row" key={b.id}>
-              <label>{b.label}</label>
-              {b.id === "local-zip" ? (
-                <button className="btn" disabled={busy === "export"} onClick={() => void exportZip()}>
-                  {busy === "export" ? "Exporting…" : "Export →"}
-                </button>
-              ) : (
-                <button
-                  className={`btn ${active ? "connected" : ""}`}
-                  disabled={busy === b.id}
-                  onClick={() => void connect(b.id)}
-                >
-                  {busy === b.id ? "Connecting…" : active ? "● Connected" : "Connect"}
-                </button>
+            <div key={b.id}>
+              <div className="settings-row">
+                <label>{b.label}</label>
+                {b.id === "local-zip" ? (
+                  <button className="btn" disabled={busy === "export"} onClick={() => void exportZip()}>
+                    {busy === "export" ? "Exporting…" : "Export →"}
+                  </button>
+                ) : (
+                  <button
+                    className={`btn ${active ? "connected" : ""}`}
+                    disabled={busy === b.id}
+                    onClick={() => void connect(b.id)}
+                  >
+                    {busy === b.id ? "Connecting…" : active ? "● Connected" : "Connect"}
+                  </button>
+                )}
+              </div>
+              {s3Id && openForm === s3Id && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: "8px 0 16px" }}>
+                  <input
+                    placeholder="Endpoint URL"
+                    value={formFields.endpoint}
+                    onChange={(e) => setFormFields({ ...formFields, endpoint: e.target.value })}
+                  />
+                  <input
+                    placeholder="Bucket name"
+                    value={formFields.bucket}
+                    onChange={(e) => setFormFields({ ...formFields, bucket: e.target.value })}
+                  />
+                  <input
+                    type="password"
+                    placeholder="Access key ID"
+                    value={formFields.accessKeyId}
+                    onChange={(e) => setFormFields({ ...formFields, accessKeyId: e.target.value })}
+                  />
+                  <input
+                    type="password"
+                    placeholder="Secret access key"
+                    value={formFields.secretAccessKey}
+                    onChange={(e) => setFormFields({ ...formFields, secretAccessKey: e.target.value })}
+                  />
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button
+                      className="btn primary"
+                      disabled={busy === s3Id}
+                      onClick={() => void submitS3Form(s3Id)}
+                    >
+                      {busy === s3Id ? "Connecting…" : "Connect"}
+                    </button>
+                    <button className="btn" onClick={() => setOpenForm(null)}>
+                      Cancel
+                    </button>
+                  </div>
+                </div>
               )}
             </div>
           );
