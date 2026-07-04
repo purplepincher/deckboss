@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <!-- No maximum-scale/user-scalable=no: this app is explicitly for
+         sunlight/older-eyes use, so blocking pinch-zoom would be a real
+         accessibility failure, not a UX nicety. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#0a1628" />
+    <meta name="description" content="DeckBoss — your boat's memory. Your data. Your shell." />
+    <!--
+      Defense-in-depth against script injection, not a primary defense
+      (React already escapes rendered text). GitHub Pages can't set
+      response headers, so this is the meta-tag form, which means
+      frame-ancestors/report-uri can't be set here at all (spec
+      disallows them outside a header) — acceptable, since a static
+      client-only app with no session/cookie state has little for a
+      clickjacking attack to actually do.
+
+      connect-src is deliberately left unrestricted: this app's entire
+      storage model is BYOK against arbitrary S3-compatible endpoints
+      the user types in themselves (Cloudflare R2, Oracle, or a
+      self-hosted MinIO on literally any domain) — a locked-down
+      allowlist would silently break that for any endpoint not already
+      known about, which is worse than the marginal protection a
+      tighter connect-src would add here.
+
+      media-src explicitly allows blob: — recorded audio is played back
+      via AudioPlayer.ts's `new Audio(URL.createObjectURL(blob))`, and
+      without this it silently falls back to default-src 'self', which
+      does not cover blob: URLs. Shipped without this the first time and
+      a beta-test round caught it: audio played back a blob: URL that CSP
+      then blocked, breaking every recording's playback with a console
+      error and no visible on-screen indication. This is exactly the kind
+      of self-inflicted regression a security tightening pass can cause —
+      worth remembering when this policy gets touched again.
+
+      script-src allows 'self' plus https://accounts.google.com: the
+      Google Drive adapter (adapters/google-drive.ts's loadGisScript())
+      dynamically injects Google Identity Services from that origin to
+      run the OAuth token-client flow client-side. Under a bare
+      script-src 'self' that cross-origin script is blocked, and
+      authenticate() rejects with "Failed to load Google Identity
+      Services script." — silently breaking the entire Drive backend the
+      moment a user configures a Client ID. This is the narrowest
+      allowance that unbreaks it (the GIS loader is the only
+      cross-origin script the app injects); it does NOT widen to
+      'unsafe-inline' or 'unsafe-eval', and the GIS script itself is
+      first-party Google code fetched over HTTPS.
+    -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self' https://accounts.google.com; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self' blob:; object-src 'none'; base-uri 'self'; connect-src *;"
+    />
+    <link rel="icon" href="/icons/icon-192x192.png" />
+    <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
+    <!-- iOS home-screen launch. Modern iOS (>=12.2) honors the manifest's
+         `display: standalone`, but older iOS only launches standalone (no
+         Safari chrome) when this capability meta is present, and uses this
+         title for the home-screen icon label. apple-mobile-web-app-status-
+         bar-style is intentionally omitted: black-translucent would push
+         content under the notch without safe-area-inset handling this app
+         doesn't do. -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="DeckBoss" />
+    <title>DeckBoss</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

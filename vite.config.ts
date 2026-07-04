@@ -9,6 +9,19 @@ import { VitePWA } from "vite-plugin-pwa";
 // asset URLs go back to root.
 const base = process.env.BASE_PATH ?? "/";
 
+// The root page is now a static landing page; only the /app/ shell should be
+// used as the SPA navigation fallback. Exclude the root path (with the
+// current base prefix) so that visitors to `/` (or `/deckboss/`) see the
+// landing page instead of being pulled into the app shell by the service
+// worker. This also keeps an old, previously-precached root app-shell
+// index.html from hijacking the new root URL: the fallback never serves the
+// root index.html, and Workbox's precache will replace the old entry with the
+// new landing-page revision on activation.
+const rootPath = base.replace(/\/$/, "");
+const rootLandingDeny = new RegExp(
+  `^${rootPath.replace(/\//g, "\\/")}\/$`
+);
+
 export default defineConfig({
   base,
   plugins: [
@@ -30,8 +43,8 @@ export default defineConfig({
         background_color: "#0a1628",
         display: "standalone",
         orientation: "portrait",
-        start_url: ".",
-        scope: ".",
+        start_url: "./app/",
+        scope: "./app/",
         icons: [
           { src: "icons/icon-192x192.png", sizes: "192x192", type: "image/png" },
           { src: "icons/icon-512x512.png", sizes: "512x512", type: "image/png" },
@@ -42,13 +55,22 @@ export default defineConfig({
         // Audio blobs and Markdown entries live in IndexedDB, not the
         // network cache — the service worker only needs to shell the app.
         globPatterns: ["**/*.{js,css,html,svg,png,ico}"],
-        navigateFallbackDenylist: [/^\/api/],
+        navigateFallback: "app/index.html",
+        navigateFallbackDenylist: [/^\/api/, rootLandingDeny],
       },
       devOptions: {
         enabled: true,
       },
     }),
   ],
+  build: {
+    rollupOptions: {
+      input: {
+        main: "index.html",
+        app: "app/index.html",
+      },
+    },
+  },
   server: {
     port: 5173,
     host: true,
