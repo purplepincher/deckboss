@@ -40,6 +40,8 @@ reviewed or certified as evidence-grade for licensing or compliance
 purposes — it hasn't. Don't rely on it for anything a regulator or insurer
 needs to accept as authoritative.
 
+![DeckBoss timeline showing voice-recorded fishing log entries](landing-assets/screenshot-timeline.png)
+
 ## Documentation by audience
 
 - **Just want to use it?** → [docs/USER_GUIDE.md](./docs/USER_GUIDE.md) —
