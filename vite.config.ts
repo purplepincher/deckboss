@@ -19,7 +19,7 @@ const base = process.env.BASE_PATH ?? "/";
 // new landing-page revision on activation.
 const rootPath = base.replace(/\/$/, "");
 const rootLandingDeny = new RegExp(
-  `^${rootPath.replace(/\//g, "\\/")}\/$`
+  `^${rootPath.replace(/\//g, "\\/")}/$`
 );
 
 export default defineConfig({
