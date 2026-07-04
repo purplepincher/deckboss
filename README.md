@@ -2,7 +2,8 @@
 
 [![Deploy to GitHub Pages](https://github.com/purplepincher/deckboss/actions/workflows/deploy-pages.yml/badge.svg)](https://github.com/purplepincher/deckboss/actions/workflows/deploy-pages.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
-[![Live app](https://img.shields.io/badge/live-purplepincher.github.io%2Fdeckboss-blue)](https://purplepincher.github.io/deckboss/)
+[![Landing page](https://img.shields.io/badge/landing-purplepincher.github.io%2Fdeckboss-blue)](https://purplepincher.github.io/deckboss/)
+[![Open app](https://img.shields.io/badge/open%20app-%2Fdeckboss%2Fapp-blue)](https://purplepincher.github.io/deckboss/app/)
 
 Voice-first digital fishing logbook. Local-first, your storage, your data.
 
