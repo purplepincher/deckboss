@@ -24,6 +24,19 @@ const rootLandingDeny = new RegExp(
 
 export default defineConfig({
   base,
+  // Vite's default appType ("spa") makes `vite dev`/`vite preview` fall back
+  // to serving the root index.html for any request path that isn't an exact
+  // static file match — including, confusingly, requests for app/index.html
+  // itself in some cases. That default is meant for single-page apps; this
+  // is now a genuine two-page site (a static landing page at root, the real
+  // SPA at /app/), so the dev/preview server needs to serve each entry
+  // point's own file rather than falling back to one. "mpa" disables the
+  // SPA fallback. This has no effect on the production build itself (the
+  // GitHub Pages static host serves whatever's in dist/ directly) — it only
+  // affects `vite dev`/`vite preview`, which is exactly where this was
+  // caught: a local `vite preview` smoke test of the built two-page output
+  // served the landing page at /app/index.html until this was set.
+  appType: "mpa",
   plugins: [
     react(),
     VitePWA({
