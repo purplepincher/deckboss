@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Voice-first fishing logbook. Works offline. No account. Syncs to your Google Drive or .zip. Free.">
+  <title>DeckBoss — Voice-first fishing log, works offline, free</title>
+  <script>if(location.hash.startsWith("#/"))location.replace("./app/"+location.hash)</script>
+  <style>
+    *,*::before,*::after{box-sizing:border-box}
+    body {
+      margin: 0;
+      padding: 20px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #0a1628;
+      color: #e8edf5;
+      font-size: 18px;
+      line-height: 1.6;
+    }
+    .container {
+      max-width: 720px;
+      margin: 0 auto;
+    }
+    h1 {
+      font-size: 2.8rem;
+      margin: 0 0 0.3rem;
+    }
+    h2 {
+      font-size: 1.8rem;
+      margin: 0 0 0.8rem;
+    }
+    a {
+      color: #8ab4f8;
+      text-decoration: underline;
+    }
+    a:hover {
+      text-decoration: none;
+    }
+    hr {
+      border: none;
+      border-top: 1px solid #2a3a5e;
+      margin: 2rem 0;
+    }
+    .btn {
+      display: inline-block;
+      background: #3b82f6;
+      color: #fff;
+      padding: 16px 36px;
+      border-radius: 8px;
+      font-size: 1.2rem;
+      font-weight: 600;
+      text-decoration: none;
+    }
+    .btn:hover {
+      background: #5090f5;
+    }
+    img.ss {
+      max-width: 100%;
+      height: auto;
+      display: block;
+      margin: 1rem 0;
+      border-radius: 8px;
+    }
+    .footer-links {
+      list-style: none;
+      padding: 0;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1.2rem;
+      justify-content: center;
+      font-size: 0.9rem;
+    }
+    .footer-links li {
+      display: inline;
+    }
+    .secondary-link {
+      display: block;
+      margin-top: 0.8rem;
+      font-size: 0.9rem;
+    }
+    @media (max-width: 480px) {
+      body {
+        padding: 12px;
+      }
+      h1 {
+        font-size: 2rem;
+      }
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <!-- Hero -->
+  <section id="hero">
+    <h1>DeckBoss</h1>
+    <h2>Voice-first fishing log. No signal needed. Free.</h2>
+    <p>Tap to record. Timestamp, GPS, and transcript happen automatically. Works offline. No account.</p>
+  </section>
+  <hr>
+
+  <!-- How it works -->
+  <section id="how-it-works">
+    <h2>How it works</h2>
+    <p><strong>1. Tap the record button.</strong></p>
+    <p><strong>2. Talk.</strong> Say what you caught, where, how. Transcript happens automatically.</p>
+    <p><strong>3. Done.</strong> Timestamp and GPS save automatically. Your entry is saved even with zero signal.</p>
+  </section>
+  <hr>
+
+  <!-- Built for a working deck -->
+  <section id="built-for-a-deck">
+    <h2>Built for a working deck</h2>
+    <p><strong>Offline by design.</strong> Everything works without cell signal. No account needed. Web Speech API runs offline after first load.</p>
+    <p><strong>Tap only. No gestures.</strong> Built for gloves and wet hands.</p>
+    <p><strong>Nothing is ever deleted.</strong> Entries are corrected via retract/amend events. Retracted entries stay recoverable via a Show Retracted toggle.</p>
+  </section>
+  <hr>
+
+  <!-- Your data -->
+  <section id="your-data">
+    <h2>Your data, not ours</h2>
+    <ul>
+      <li>No account.</li>
+      <li>No DeckBoss server ever holds your data.</li>
+      <li>Syncs to your Google Drive, Cloudflare R2, Oracle Object Storage, or a plain .zip export.</li>
+      <li>Open source. MIT license.</li>
+    </ul>
+  </section>
+  <hr>
+
+  <!-- Screenshots -->
+  <section id="screenshots">
+    <h2>Screenshots</h2>
+    <img class="ss" src="../landing-assets/screenshot-record.png" width="780" height="1688" alt="DeckBoss record screen showing large microphone button and recent entries list.">
+    <img class="ss" src="../landing-assets/screenshot-timeline.png" width="780" height="1688" alt="DeckBoss timeline view listing entries with date, GPS, and transcript preview.">
+    <img class="ss" src="../landing-assets/screenshot-entry-detail.png" width="780" height="1688" alt="DeckBoss entry detail screen showing full transcript, location map, and editing options.">
+  </section>
+  <hr>
+
+  <!-- Honesty block -->
+  <section id="honesty">
+    <h2>A few honest words</h2>
+    <p>This is a hardened MVP heading into 6–8 weeks of on-the-water field beta testing on 3–5 working boats.</p>
+    <p>This is a personal log. It is not a substitute for official catch reporting. Has not been reviewed or certified as evidence-grade.</p>
+  </section>
+  <hr>
+
+  <!-- CTA -->
+  <section id="cta">
+    <a href="./app/" class="btn">Open DeckBoss — Free, No Signup</a>
+    <a class="secondary-link" href="https://github.com/purplepincher/deckboss">View the code on GitHub</a>
+  </section>
+  <hr>
+
+  <!-- Footer -->
+  <footer>
+    <ul class="footer-links">
+      <li><a href="https://github.com/purplepincher/deckboss">GitHub repo</a></li>
+      <li><a href="https://github.com/purplepincher/deckboss/blob/main/docs/USER_GUIDE.md">User Guide</a></li>
+      <li><a href="https://github.com/purplepincher/deckboss/blob/main/ARCHITECTURE.md">Architecture</a></li>
+      <li><a href="https://github.com/purplepincher/deckboss/blob/main/LICENSE">MIT license</a></li>
+      <li><a href="https://github.com/purplepincher">PurplePincher org</a></li>
+    </ul>
+  </footer>
+
+</div>
+</body>
+</html>
