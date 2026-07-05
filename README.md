@@ -23,8 +23,8 @@ dropped, only ever corrected, on top of a merge model built specifically
 so two offline devices can never step on each other's data (see
 [Design principles](#design-principles) below).
 
-Part of the [PurplePincher](https://github.com/purplepincher) Vessel-as-a-Robot
-family. See [ARCHITECTURE.md](./ARCHITECTURE.md) for how the pieces fit
+The flagship product of [PurplePincher](https://github.com/purplepincher).
+See [ARCHITECTURE.md](./ARCHITECTURE.md) for how the pieces fit
 together, and [`docs/cocapn-foundation-mirror/SAFETY.md`](./docs/cocapn-foundation-mirror/SAFETY.md)
 (the local mirror of the sibling [`cocapn-foundation`](https://github.com/SuperInstance/cocapn-foundation)
 repo's safety/schema docs — mirrored because that repo doesn't guarantee
