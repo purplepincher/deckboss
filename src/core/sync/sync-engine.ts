@@ -13,7 +13,7 @@ import {
   markAudioVerified,
 } from "../storage/local-db";
 import { buildAdapter } from "../storage/registry";
-import { entryPath, audioPath, type StorageAdapter, type FileMetadata } from "../storage/interface";
+import { entryPath, audioPath, STORAGE_ROOT, type StorageAdapter, type FileMetadata } from "../storage/interface";
 import { mimeToExt } from "../../utils/file";
 import { newId } from "../../utils/id";
 import { nowIso } from "../../utils/date";
@@ -245,7 +245,25 @@ export async function pullRemoteEntries(): Promise<number> {
   if (!adapter) return 0;
 
   const manifest = await adapter.getManifest();
+
+  // Snapshot local entry count BEFORE pulling anything. A device with
+  // zero local entries is exactly what a freshly recovering device looks
+  // like on its first cold pull — and it's the only case the
+  // "stale/incomplete manifest" gap actually bites (see ROADMAP, "The
+  // restore drill" → "NOT FIXED, reported — a stale/incomplete manifest
+  // is a real, unmitigated single point of failure"). A normal sync on
+  // a device that already has local entries must NOT pay the cost of a
+  // full listFiles(STORAGE_ROOT) scan every time: that case is already
+  // covered by refreshManifest()'s push-time union step (which a device
+  // with local entries exercises on every sync), and a cold pull over
+  // the whole folder has real cost implications on real backends (Drive
+  // API calls, S3 ListObjectsV2 round-trips). Scoped deliberately, not
+  // as a blind "always scan" default — see fallbackScanForOrphanEntries
+  // for the per-adapter recursion notes.
+  const coldStartRecovery = (await allEntries()).length === 0;
+
   let pulled = 0;
+  const manifestListedPaths = new Set(manifest.entries.map((f) => f.path));
 
   for (const file of manifest.entries) {
     if (!file.path.endsWith(".md")) continue;
@@ -263,6 +281,87 @@ export async function pullRemoteEntries(): Promise<number> {
     pulled++;
   }
 
+  if (coldStartRecovery) {
+    pulled += await fallbackScanForOrphanEntries(adapter, manifestListedPaths);
+  }
+
+  return pulled;
+}
+
+/**
+ * Directory-scan fallback for a stale/incomplete manifest (ROADMAP, "The
+ * restore drill"): picks up entry files that are physically present in
+ * storage but missing from manifest.entries — a real-backend race where
+ * an entry upload succeeds but the manifest write fails leaves a file
+ * permanently invisible to every device's manifest-driven pull, forever,
+ * until some device's push happens to reference it. The push-time
+ * manifest-union fix in refreshManifest() only helps devices that have
+ * local entries to contribute; a freshly recovering device never does,
+ * which is exactly why this scan is scoped to the zero-local cold-start
+ * case (see pullRemoteEntries' coldStartRecovery check) rather than
+ * running on every sync.
+ *
+ * "RECURSIVE" listFiles() CONTRACT — verified per adapter at the time
+ * this was added, not taken on faith from interface.ts's doc comment:
+ *  - LocalZipAdapter: effectively recursive — paths live in one flat
+ *    Map and are filtered by string prefix, so listFiles(STORAGE_ROOT)
+ *    returns every .md under DeckBoss/{yyyy}/{mm}/{dd}/ regardless of
+ *    subfolder depth.
+ *  - S3CompatibleAdapter: recursive via S3's flat-key Prefix semantics
+ *    (ListObjectsV2Command with Prefix returns all matching keys).
+ *    Caveat: this call site relies on the SDK's default MaxKeys (1000)
+ *    with no pagination — fine for a fishing log's scale, but a real
+ *    concern past ~1000 objects that should be flagged if/when this
+ *    scan ever runs against larger buckets.
+ *  - GoogleDriveAdapter: NOT actually recursive despite the interface
+ *    contract — its listFiles() issues `'${parentId}' in parents` which
+ *    lists only DIRECT children of the leaf folder resolved by the
+ *    prefix's directory portion, not descendants of subfolders. So this
+ *    scan, as written, will discover orphans only at the top level of
+ *    DeckBoss/ on Drive, not those nested under DeckBoss/{yyyy}/{mm}/{dd}/
+ *    — exactly where real entries live. That's a separate adapter-level
+ *    bug worth fixing on its own; reported as a finding, NOT papered
+ *    over silently here. The scan itself remains correct (just
+ *    incomplete on Drive today) and does no harm.
+ */
+async function fallbackScanForOrphanEntries(
+  adapter: StorageAdapter,
+  manifestListedPaths: Set<string>,
+): Promise<number> {
+  let files: FileMetadata[];
+  try {
+    files = await adapter.listFiles(STORAGE_ROOT);
+  } catch {
+    // Best-effort: the manifest-driven pull above already did its job.
+    // If a real backend's listFiles() is unavailable momentarily we
+    // don't want to fail the whole sync — same skip-manifest-entry
+    // philosophy, just at the scan level.
+    return 0;
+  }
+
+  let pulled = 0;
+  for (const file of files) {
+    if (!file.path.endsWith(".md")) continue;
+    if (manifestListedPaths.has(file.path)) continue;
+
+    let remoteEntry;
+    try {
+      const { parseEntry } = await lazyParser();
+      remoteEntry = parseEntry(await adapter.readFile(file.path));
+    } catch {
+      continue; // corrupt or unreadable orphan — same skip semantics as the manifest loop
+    }
+
+    // coldStartRecovery means local was empty before the manifest pass;
+    // the only way this entry could now exist locally is if the manifest
+    // pass already pulled it under a different path (the "manifest
+    // ambiguity" adversarial case in restore-drill.test.ts). Skip rather
+    // than risk a redundant/overwriting putEntry.
+    if (await getEntry(remoteEntry.id)) continue;
+
+    await putEntry(remoteEntry);
+    pulled++;
+  }
   return pulled;
 }
 
