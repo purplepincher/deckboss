@@ -112,10 +112,17 @@ Explicitly **not** done this pass, per Fable's own prioritization:
   is destructive-by-policy in a product whose defining invariant is
   "never destroy a capture." Deferred; if it ever happens, pruning may
   only touch audio already confirmed synced to the user's own storage.
-- **A real Whisper offline-retry queue** (upload stored audio once
-  connectivity returns) — genuinely useful and honestly the more complete
-  fix, but bigger than a pre-launch pass. Good Week 2/3 candidate now that
-  the immediate honesty problem (silent empty transcript) is fixed.
+- ~~A real Whisper offline-retry queue~~ — **this is now done, this
+  entry is stale.** `enqueueWhisperRetry`/`drainQueue`/
+  `pendingWhisperRetryEntryIds` in `sync-engine.ts` implement a real
+  job queue (dedup, priority, `maxRetries: 20`) for exactly this case,
+  verified today: `tests/unit/whisper-retry.test.ts` exists and its
+  4 tests genuinely pass (`npx vitest run tests/unit/whisper-retry.test.ts`).
+  Left here, struck through rather than deleted, so the record shows
+  this item was tracked as open and closed rather than silently
+  vanishing — the inverse of the usual doc-drift problem this whole
+  research mission has found dozens of times elsewhere (code ahead of
+  docs, not behind).
 - **iPhone/Safari testing, the phone-lifecycle gauntlet** (call
   interruption, hours backgrounded, overnight restart, low battery), and
   **one full manual recovery drill** (clear site data → reinstall →
