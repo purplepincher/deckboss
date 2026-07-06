@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getAudioBlob } from "../../core/storage/local-db";
+import { rehydrateAudioForEntry } from "../../core/sync/sync-engine";
 
 /**
  * Loads the audio blob for a given entry id (and reloads when id changes).
@@ -22,22 +22,33 @@ import { getAudioBlob } from "../../core/storage/local-db";
  * archived blob reachable again, and fails gracefully (no audio UI) if the
  * archive cannot be reached.
  */
-export function useAudioBlob(id: string | undefined): Blob | null {
+export function useAudioBlob(id: string | undefined): { blob: Blob | null; loading: boolean } {
   const [blob, setBlob] = useState<Blob | null>(null);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (!id) {
       setBlob(null);
+      setLoading(false);
       return;
     }
     let cancelled = false;
-    void getAudioBlob(id).then((b) => {
-      if (!cancelled) setBlob(b ?? null);
-    });
+    setLoading(true);
+    void rehydrateAudioForEntry(id).then(
+      (b) => {
+        if (!cancelled) {
+          setBlob(b ?? null);
+          setLoading(false);
+        }
+      },
+      () => {
+        if (!cancelled) setLoading(false);
+      },
+    );
     return () => {
       cancelled = true;
     };
   }, [id]);
 
-  return blob;
+  return { blob, loading };
 }

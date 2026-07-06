@@ -10,7 +10,7 @@ export function EntryDetailScreen() {
   const entries = useDeckBossStore((s) => s.entries);
   const amendEntry = useDeckBossStore((s) => s.amendEntry);
   const retractEntry = useDeckBossStore((s) => s.retractEntry);
-  const audioBlob = useAudioBlob(id);
+  const { blob: audioBlob, loading: audioLoading } = useAudioBlob(id);
 
   const effective = entries.find((e) => e.id === id) ?? null;
 
@@ -58,6 +58,11 @@ export function EntryDetailScreen() {
             : "No transcript — audio saved. Play it back below.")}
       </div>
 
+      {effective.audio && audioLoading && (
+        <p className="record-meta" style={{ marginTop: 12 }}>
+          Fetching audio from archive…
+        </p>
+      )}
       <AudioWaveform blob={audioBlob} />
 
       <div className="log-card-chips" style={{ marginTop: 12 }}>

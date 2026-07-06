@@ -6,6 +6,7 @@ import {
   getEntry,
   putEntry,
   getAudioBlob,
+  putAudioBlob,
   enqueueSyncJob,
   getConfig,
   allAudioVerifiedAt,
@@ -406,7 +407,7 @@ export async function reconcileAudio(): Promise<{ requeued: number }> {
   }
 }
 
-async function getActiveAdapter(): Promise<StorageAdapter | null> {
+export async function getActiveAdapter(): Promise<StorageAdapter | null> {
   const config = await getConfig();
   const adapter = await buildAdapter(config);
   if (!adapter) return null;
@@ -426,6 +427,47 @@ async function getActiveAdapter(): Promise<StorageAdapter | null> {
     return null;
   }
   return (await adapter.isAuthenticated()) ? adapter : null;
+}
+
+/**
+ * Lazy-on-access audio rehydration.
+ *
+ * When a fresh device pulls entries from the archive, it gets every entry's
+ * text and metadata but no local audio blobs. If an entry claims to have
+ * audio (entry.audio is non-null) and the local blob is missing, this
+ * function fetches the blob from the configured archive via the active
+ * StorageAdapter, writes it back into the local audio store, and returns it.
+ * Subsequent calls read locally until the blob is evicted again.
+ *
+ * This is deliberately not a bulk background sweep: DeckBoss's offline-first
+ * model means the phone is a cache and the archive is canonical, but
+ * re-fetching every recording for entries a user never revisits would waste
+ * bandwidth and battery. Rehydration happens only when audio is actually
+ * accessed.
+ *
+ * Returns `undefined` when there is no audio metadata, no configured
+ * adapter, or the archive cannot be reached. Callers should treat that as
+ * "audio unavailable" and let the UI fall back gracefully.
+ */
+export async function rehydrateAudioForEntry(entryId: string): Promise<Blob | undefined> {
+  const localBlob = await getAudioBlob(entryId);
+  if (localBlob) return localBlob;
+
+  const entry = await getEntry(entryId);
+  if (!entry?.audio) return undefined;
+
+  const adapter = await getActiveAdapter();
+  if (!adapter) return undefined;
+
+  const ext = mimeToExt(entry.audio.format);
+  const path = audioPath(entryId, ext);
+  try {
+    const remoteBlob = await adapter.readBlob(path);
+    await putAudioBlob(entryId, remoteBlob);
+    return remoteBlob;
+  } catch {
+    return undefined;
+  }
 }
 
 // useSync.ts can trigger this both from the online/offline listener and

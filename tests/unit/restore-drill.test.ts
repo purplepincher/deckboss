@@ -16,6 +16,7 @@ import {
   pushAllLocalEntries,
   pullRemoteEntries,
   syncNow,
+  rehydrateAudioForEntry,
 } from "../../src/core/sync/sync-engine";
 import { buildAdapter, clearAdapterCache } from "../../src/core/storage/registry";
 import { LocalZipAdapter } from "../../src/core/storage/adapters/local-zip";
@@ -621,5 +622,90 @@ describe("restore drill, adversarial: a manifest that's stale/incomplete relativ
     // deliberate decision, not a guess).
     expect(await getEntry(orphan.id)).toBeUndefined();
     void result;
+  });
+});
+
+// ===========================================================================
+// 6. AUDIO REHYDRATION: a fresh device can fetch archived audio on demand
+//    when an entry with audio is actually accessed.
+// ===========================================================================
+
+describe("restore drill: audio rehydration on demand", () => {
+  it("rehydrates a verified archived audio blob into local IndexedDB the first time it is accessed on a fresh device", async () => {
+    clearAdapterCache();
+    await wipeLocalDeviceState();
+    await setConfig(LOCAL_ZIP_CONFIG);
+
+    // ---- DEVICE A: capture an entry with audio and sync it to the archive.
+    const entry = await captureEntry({
+      audioBlob: audioBlobFor("haul one audio bytes"),
+      transcript: { text: "Set twelve pots starboard rail", confidence: 0.9, language: "en", engine: "webspeech" },
+    });
+    const originalBlob = await getAudioBlob(entry.id);
+    expect(originalBlob).toBeDefined();
+
+    const syncResultA = await syncNow();
+    expect(syncResultA.pushed).toBeGreaterThan(0);
+    expect(await getAudioVerifiedAt(entry.id)).not.toBeNull();
+
+    const sharedAdapter = await buildAdapter(LOCAL_ZIP_CONFIG);
+    if (!sharedAdapter) throw new Error("setup bug: no adapter");
+
+    // ---- DEVICE B: fresh install, same archive. Text recovers; audio does
+    // not come back on its own (this is the gap being fixed).
+    await wipeLocalDeviceState();
+    expect(await allEntries()).toHaveLength(0);
+
+    await setConfig(LOCAL_ZIP_CONFIG);
+    const deviceBAdapter = await buildAdapter(LOCAL_ZIP_CONFIG);
+    expect(deviceBAdapter).toBe(sharedAdapter);
+
+    const syncResultB = await syncNow();
+    expect(syncResultB.pulled).toBe(1);
+
+    const pulled = await getEntry(entry.id);
+    expect(pulled).toBeDefined();
+    expect(pulled!.audio).not.toBeNull();
+
+    // Before rehydration: the local audio store is empty, exactly like the
+    // existing restore-drill assertion documented.
+    expect(await getAudioBlob(entry.id)).toBeUndefined();
+
+    // RED→GREEN: this is the new code path. Before the fix there was no
+    // remote fallback anywhere in src/; after the fix, accessing the audio
+    // fetches it from the archive, caches it locally, and returns it.
+    const rehydrated = await rehydrateAudioForEntry(entry.id);
+    expect(rehydrated).toBeDefined();
+    expect(rehydrated!.size).toBe(originalBlob!.size);
+
+    // The blob is now cached locally, so a second access is a local read.
+    const cached = await getAudioBlob(entry.id);
+    expect(cached).toBeDefined();
+    expect(cached!.size).toBe(originalBlob!.size);
+
+    // Rehydration is idempotent: calling it again returns the cached blob
+    // without touching the network.
+    const secondRehydration = await rehydrateAudioForEntry(entry.id);
+    expect(secondRehydration).toBeDefined();
+    expect(secondRehydration!.size).toBe(originalBlob!.size);
+  });
+
+  it("returns undefined for entries that never had audio", async () => {
+    clearAdapterCache();
+    await wipeLocalDeviceState();
+    await setConfig(LOCAL_ZIP_CONFIG);
+
+    const entry = await captureEntry({
+      audioBlob: null,
+      transcript: { text: "No audio here", confidence: 0.9, language: "en", engine: "webspeech" },
+    });
+    await syncNow();
+
+    await wipeLocalDeviceState();
+    await setConfig(LOCAL_ZIP_CONFIG);
+    await syncNow();
+
+    const rehydrated = await rehydrateAudioForEntry(entry.id);
+    expect(rehydrated).toBeUndefined();
   });
 });
