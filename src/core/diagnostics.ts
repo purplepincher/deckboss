@@ -18,6 +18,7 @@ const DiagnosticsSchema = z.object({
   recordingsFailed: z.number().int().nonnegative(),
   syncAttempts: z.number().int().nonnegative(),
   syncFailures: z.number().int().nonnegative(),
+  entriesSkipped: z.number().int().nonnegative(),
   firstEventAt: z.string().nullable(),
   lastEventAt: z.string().nullable(),
 });
@@ -30,6 +31,7 @@ function defaultDiagnostics(): Diagnostics {
     recordingsFailed: 0,
     syncAttempts: 0,
     syncFailures: 0,
+    entriesSkipped: 0,
     firstEventAt: null,
     lastEventAt: null,
   };
@@ -61,3 +63,16 @@ export const recordRecordingCompleted = () => bump("recordingsCompleted");
 export const recordRecordingFailed = () => bump("recordingsFailed");
 export const recordSyncAttempt = () => bump("syncAttempts");
 export const recordSyncFailure = () => bump("syncFailures");
+
+/** Increment `entriesSkipped` by the given amount (not just 1). */
+export async function recordEntriesSkipped(count: number): Promise<void> {
+  const current = await getDiagnostics();
+  const now = new Date().toISOString();
+  const next: Diagnostics = {
+    ...current,
+    entriesSkipped: current.entriesSkipped + count,
+    firstEventAt: current.firstEventAt ?? now,
+    lastEventAt: now,
+  };
+  await set(KEY, next, diagnosticsStore);
+}
