@@ -313,16 +313,16 @@ export async function pullRemoteEntries(): Promise<number> {
  *    with no pagination — fine for a fishing log's scale, but a real
  *    concern past ~1000 objects that should be flagged if/when this
  *    scan ever runs against larger buckets.
- *  - GoogleDriveAdapter: NOT actually recursive despite the interface
- *    contract — its listFiles() issues `'${parentId}' in parents` which
- *    lists only DIRECT children of the leaf folder resolved by the
- *    prefix's directory portion, not descendants of subfolders. So this
- *    scan, as written, will discover orphans only at the top level of
- *    DeckBoss/ on Drive, not those nested under DeckBoss/{yyyy}/{mm}/{dd}/
- *    — exactly where real entries live. That's a separate adapter-level
- *    bug worth fixing on its own; reported as a finding, NOT papered
- *    over silently here. The scan itself remains correct (just
- *    incomplete on Drive today) and does no harm.
+ *  - GoogleDriveAdapter: recursive — listFiles() resolves the prefix to
+ *    its deepest folder, then walks every descendant folder with a
+ *    paginated `'${parentId}' in parents` query, recursing into
+ *    mimeType='application/vnd.google-apps.folder' children. So this
+ *    scan discovers orphans at any depth under DeckBoss/, including
+ *    DeckBoss/{yyyy}/{mm}/{dd}/{id}.md (exactly where real entries
+ *    live). The walk issues one Drive list call per folder actually
+ *    present under the prefix — proportional to the folder-tree size,
+ *    no N+1 per file — which is the cost scope this cold-start-only
+ *    scan was always sized for.
  */
 async function fallbackScanForOrphanEntries(
   adapter: StorageAdapter,

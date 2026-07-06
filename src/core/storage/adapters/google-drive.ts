@@ -235,20 +235,85 @@ export class GoogleDriveAdapter implements StorageAdapter {
     this.fileIdCache.delete(path);
   }
 
+  /**
+   * Recursive directory walk. Resolves the prefix to the deepest folder
+   * it represents, then walks every descendant folder and collects every
+   * non-folder file — the StorageAdapter contract (interface.ts: "//
+   * recursive") LocalZipAdapter and S3CompatibleAdapter already honor,
+   * and the one this method historically did NOT: the previous
+   * implementation issued a single `'${parentId}' in parents` query that
+   * returned only direct children of the leaf folder, so files nested
+   * under subfolders (exactly where real entries live:
+   * DeckBoss/{yyyy}/{mm}/{dd}/{id}.md) were invisible. That broke the
+   * sync engine's cold-start orphan scan (fallbackScanForOrphanEntries
+   * in sync-engine.ts), which relies on this returning every .md under
+   * the prefix regardless of depth.
+   *
+   * The prefix is treated as a folder when its final segment has no
+   * extension (e.g., STORAGE_ROOT = "DeckBoss"); when the final segment
+   * looks like a filename (has an extension, e.g.,
+   * ".deckboss/attachments/{id}_audio.webm"), the parent folder is
+   * resolved and scanned recursively and the caller filters the result
+   * by exact path. That preserves verifyRemoteBlob()'s use case while
+   * making the orphan scan actually work.
+   */
   async listFiles(prefix: string): Promise<FileMetadata[]> {
-    const { dirSegments } = this.splitPath(prefix.endsWith("/") ? `${prefix}x` : prefix);
-    const parentId = await this.resolveFolderId(dirSegments);
-    const res = await this.apiFetch(
-      `${DRIVE_API}/files?q='${parentId}'+in+parents+and+trashed=false&fields=files(id,name,modifiedTime,size)`,
-    );
-    const data = (await res.json()) as {
-      files: { id: string; name: string; modifiedTime: string; size?: string }[];
-    };
-    return data.files.map((f) => ({
-      path: `${prefix.replace(/\/[^/]*$/, "")}/${f.name}`,
-      size: f.size ? Number(f.size) : 0,
-      modifiedAt: f.modifiedTime,
-    }));
+    const trimmed = prefix.replace(/\/+$/, "");
+    const segments = trimmed.split("/").filter(Boolean);
+    const lastSegment = segments[segments.length - 1] ?? "";
+    // Heuristic: a trailing segment with a dot extension (".md", ".webm",
+    // ".json", ".yaml") is a filename; otherwise treat the whole prefix
+    // as a folder path. Matches every path this app's interface.ts
+    // produces (entryPath, audioPath, MANIFEST_PATH) and STORAGE_ROOT
+    // itself.
+    const lastIsFile = /\.[^/]+$/.test(lastSegment);
+    const folderSegments = lastIsFile ? segments.slice(0, -1) : segments;
+    const folderPrefix = folderSegments.join("/");
+
+    const folderId = await this.resolveFolderId(folderSegments);
+    const out: FileMetadata[] = [];
+    await this.walkFolderTree(folderId, folderPrefix, out);
+    return out;
+  }
+
+  /**
+   * Depth-first walk of a Drive folder. Issues one paginated list call
+   * per folder (no N+1 per child — Drive returns both files and
+   * subfolders in a single parents query, distinguished by mimeType),
+   * recursing only into children whose mimeType is the Drive folder
+   * type. Folder IDs discovered during the walk are cached so subsequent
+   * resolveFolderId calls for those paths skip the lookup round-trip.
+   */
+  private async walkFolderTree(
+    folderId: string,
+    folderPath: string,
+    out: FileMetadata[],
+  ): Promise<void> {
+    let pageToken: string | undefined;
+    do {
+      const q = encodeURIComponent(`'${folderId}' in parents and trashed=false`);
+      let url = `${DRIVE_API}/files?q=${q}&fields=nextPageToken,files(id,name,mimeType,modifiedTime,size)`;
+      if (pageToken) url += `&pageToken=${encodeURIComponent(pageToken)}`;
+      const res = await this.apiFetch(url);
+      const data = (await res.json()) as {
+        nextPageToken?: string;
+        files: { id: string; name: string; mimeType: string; modifiedTime: string; size?: string }[];
+      };
+      for (const f of data.files) {
+        const childPath = folderPath ? `${folderPath}/${f.name}` : f.name;
+        if (f.mimeType === "application/vnd.google-apps.folder") {
+          this.folderIdCache.set(childPath, f.id);
+          await this.walkFolderTree(f.id, childPath, out);
+        } else {
+          out.push({
+            path: childPath,
+            size: f.size ? Number(f.size) : 0,
+            modifiedAt: f.modifiedTime,
+          });
+        }
+      }
+      pageToken = data.nextPageToken;
+    } while (pageToken);
   }
 
   async readBlob(path: string): Promise<Blob> {
