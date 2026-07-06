@@ -77,11 +77,15 @@ Video walkthrough: [link]
 
 > Hey [name], [referral/intro line]. I'm working with a small beta of DeckBoss, a free voice logbook for fishermen that works offline and stores data on YOUR Google Drive — no account needed. Before we get started I just need to know: what phone do you run (iPhone or Android), and what browser do you use most often (Safari, Chrome, etc.)? Takes 30 seconds.
 
-**3b. Week one — parallel logging ask**
+**3b. Setup session — scheduling**
+
+> [Name], next step is a quick in-person setup — I'll come to you (dock, boat, wherever's easiest), install DeckBoss on your phone's home screen, get it synced to your own Google Drive/R2/Oracle account, and show you how it all works before you're on your own. Takes about 15 minutes. When's good?
+
+**3c. Week one — parallel logging ask**
 
 > [Name], just wanted to confirm you're set up on DeckBoss. One heads-up for week one: we're asking you keep your current logging method running in parallel while you test it. Don't drop what you're using yet — this is so we can see how the two compare. Just log on DeckBoss once a day when you can. Let me know if anything's confusing and I'll walk you through it.
 
-**3c. Daily check-in**
+**3d. Daily check-in**
 
 > [Name], quick check-in — did you get a chance to log today? No pressure if you didn't. Just want to know how it's holding up in real conditions. Anything not working, or anything you'd change? Let me know here or call if easier.
 
@@ -90,6 +94,9 @@ Video walkthrough: [link]
 ### What we're asking from you in this beta
 
 This is a 6–8 week field test of DeckBoss on 3–5 working boats. Here is exactly what participation involves. Read this before you commit. We will not surprise you with asks you didn't sign up for.
+
+**A one-time setup session, in person.**
+Before week one starts, someone from the project comes to you — dock, boat, wherever's easiest — and installs DeckBoss on your phone's home screen, connects it to your own Google Drive/R2/Oracle account, and confirms your first entry actually lands there. Takes about 15 minutes. You don't set this up alone.
 
 **Week one — run two logs.**
 Keep your current logging method going alongside DeckBoss. Do not replace it yet. We need this parallel run to see how DeckBoss performs against what you're already using.
