@@ -479,6 +479,16 @@ its own; one real, severe, silent data-loss bug was found and fixed.**
   nowhere for every one of them. Needs a real design pass (automatic
   background rehydration vs. an explicit "download audio" action vs.
   stream-on-play — each has different cost/UX tradeoffs), not a guess.
+  ~~NOT FIXED~~ **FIXED (kimi, `kimi/audio-rehydration`).** Design
+  decision: lazy-on-access rehydration, not a bulk background sweep —
+  `rehydrateAudioForEntry()` in `sync-engine.ts` checks the local blob
+  store first, and on a miss fetches from the active `StorageAdapter`,
+  writes it back locally, and returns it; `useAudioBlob.ts` now calls
+  this instead of reading IndexedDB directly, with a `loading` flag
+  surfaced in `EntryDetailScreen.tsx`. Verified red/green: with
+  rehydration stubbed out the new `restore-drill.test.ts` case fails;
+  with the real implementation it passes. 164 tests green, no
+  regressions.
 - **NOT FIXED, reported — a stale/incomplete manifest is a real,
   unmitigated single point of failure for the whole archive-recovery
   promise.** `pullRemoteEntries()` only ever iterates `manifest.entries`
@@ -496,6 +506,22 @@ its own; one real, severe, silent data-loss bug was found and fixed.**
   `GoogleDriveAdapter`/`S3CompatibleAdapter` here), with real cost
   implications (scanning the whole folder on every cold pull) — a
   deliberate decision, not a guess.
+  ~~NOT FIXED~~ **FIXED (GLM, `glm/manifest-fallback-scan`).** Scoped
+  exactly like the manifest-union fix scoped itself: the fallback scan
+  (`fallbackScanForOrphanEntries()`) only runs when the device has zero
+  local entries — the actual cold-start-recovery signature — so a
+  normal day-to-day sync never pays for a full `listFiles()` walk
+  (proven by a spy-based test asserting the scan-triggering call never
+  fires on a device that already has local entries). The "unverified for
+  GoogleDriveAdapter" caveat above was checked, not assumed: `LocalZipAdapter`
+  and `S3CompatibleAdapter` are genuinely recursive over the scan's
+  prefix; **`GoogleDriveAdapter.listFiles()` is not** — it lists only
+  direct children of the resolved folder, not descendants, so this scan
+  will miss orphans nested under `DeckBoss/{yyyy}/{mm}/{dd}/` on Drive
+  specifically. That's a real, separate adapter-level gap, reported here
+  rather than papered over — the scan itself is correct and harmless,
+  just incomplete on Drive until `GoogleDriveAdapter.listFiles()` is
+  made properly recursive. 165 tests green, no regressions.
 - **Smaller, confirmed-safe finding, not fixed:** a manifest entry whose
   underlying file has gone missing/corrupted is skipped gracefully by
   `pullRemoteEntries()` (matches its own stated contract) — but silently,
@@ -526,12 +552,15 @@ its own; one real, severe, silent data-loss bug was found and fixed.**
   swap in place, no regressions.
 
 **Gates boat 1 per the Phase 2 plan, together with the device census and
-the human phone drill — status: not yet clear to proceed.** The
-manifest-destruction bug is fixed and verified; the audio-rehydration gap
-is not fixed and is a real, user-visible break of the retention policy's
-central promise on a phone that's actually lost data. The human phone
-drill (real backend, real device) still needs to run; this agent round
-only covers `LocalZipAdapter`. A real S3-compatible/Google Drive run
+the human phone drill — status: both agent-level findings are now fixed
+and verified; the human phone drill is the only remaining gate.** The
+manifest-destruction bug, the audio-rehydration gap, and the
+stale-manifest fallback-scan gap are all fixed and independently
+re-verified (typecheck + full suite, in the worktree and again after
+merge to `main`). What's left is exactly what an agent round against
+`LocalZipAdapter` can't cover: the human phone drill (real backend, real
+device) still needs to run — this agent round only covers
+`LocalZipAdapter`. A real S3-compatible/Google Drive run
 would need the same shape (device A populates + syncs, device B — fresh
 credentials, same bucket/folder, empty local state — recovers) plus
 backend-specific adversarial cases this drill couldn't reach from
