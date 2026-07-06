@@ -1,6 +1,7 @@
 import type { QueryParams } from "../core/tensor-log/query-engine";
 import type { EntityType } from "../core/types/log-entry";
-import { SPECIES, GEAR, WEATHER, keywordRegex } from "./entity-extractor";
+import { keywordRegex } from "./entity-extractor";
+import { SPECIES, GEAR, WEATHER } from "./domain-packs/fishing/vocabulary";
 
 /**
  * GPS position supplied by the caller. `null` means the user's location is

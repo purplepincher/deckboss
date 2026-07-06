@@ -1,4 +1,10 @@
 import type { Entity } from "../core/types/log-entry";
+import {
+  SPECIES,
+  GEAR,
+  LOCATION_RELATIVE,
+  WEATHER,
+} from "./domain-packs/fishing/vocabulary";
 
 /**
  * Phase 1 entity extraction: keyword lists + regex, no ML dependency. Good
@@ -6,62 +12,13 @@ import type { Entity } from "../core/types/log-entry";
  * LogEntry.entities so query-engine's `entities` filter and Phase 3's
  * ML-training export both have structured data to work from. Upgrades to
  * real NLP in Phase 3; this module's job is just to not block on that.
+ *
+ * The fishing-specific word lists (SPECIES/GEAR/LOCATION_RELATIVE/WEATHER)
+ * live in `./domain-packs/fishing/vocabulary.ts`. This module owns only the
+ * generic extraction machinery — regex building, span/overlap logic,
+ * number-word parsing — so a different domain pack can slot in behind the
+ * same boundary without touching the engine.
  */
-
-export const SPECIES = [
-  "chinook",
-  "coho",
-  "pink salmon",
-  "chum",
-  "sockeye",
-  "salmon",
-  "lingcod",
-  "halibut",
-  "rockfish",
-  "sablefish",
-  "albacore",
-  "tuna",
-  "dungeness",
-  "crab",
-  "shrimp",
-  "prawn",
-  "snapper",
-  "cod",
-  "herring",
-];
-
-export const GEAR = [
-  "crab pots?",
-  "crab traps?",
-  "gillnet",
-  "longline",
-  "troll gear",
-  "seine",
-  "traps?",
-  "pots?",
-  "rod",
-  "reel",
-  "net",
-  "line",
-  "hook",
-  "buoy",
-  "anchor",
-];
-
-const LOCATION_RELATIVE = [
-  "port rail",
-  "starboard rail",
-  "port side",
-  "starboard side",
-  "port",
-  "starboard",
-  "bow",
-  "stern",
-  "amidships",
-  "rail",
-];
-
-export const WEATHER = ["wind", "swell", "fog", "rain", "chop", "chopp?y", "calm", "glassy", "squall"];
 
 const NUMBER_WORDS: Record<string, number> = {
   one: 1,
