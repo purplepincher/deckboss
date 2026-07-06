@@ -4,7 +4,7 @@ import { pendingJobCount, failedJobCount } from "../../core/sync/queue";
 import { useOfflineStatus } from "./useOfflineStatus";
 import { useDeckBossStore } from "../../state/store";
 import type { SyncStatus } from "../../core/sync/types";
-import { recordSyncAttempt, recordSyncFailure } from "../../core/diagnostics";
+import { recordSyncAttempt, recordSyncFailure, recordEntriesSkipped } from "../../core/diagnostics";
 
 /**
  * OfflineBanner and SettingsScreen both read this. §10.3's four states map
@@ -31,9 +31,12 @@ export function useSync() {
     setStatus("syncing");
     void recordSyncAttempt();
     try {
-      await syncNow();
+      const syncResult = await syncNow();
       setLastSyncAt(new Date().toISOString());
       setStatus("online");
+      if (syncResult.skipped > 0) {
+        void recordEntriesSkipped(syncResult.skipped);
+      }
     } catch {
       setStatus("error");
       void recordSyncFailure();

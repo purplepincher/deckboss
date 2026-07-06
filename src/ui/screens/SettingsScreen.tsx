@@ -256,7 +256,8 @@ export function SettingsScreen() {
         {diagnostics && (
           <p style={{ fontSize: 12, opacity: 0.6, marginTop: 8 }}>
             {diagnostics.recordingsCompleted} saved · {diagnostics.recordingsFailed} failed to start ·{" "}
-            {diagnostics.syncFailures} sync error{diagnostics.syncFailures === 1 ? "" : "s"}
+            {diagnostics.syncFailures} sync error{diagnostics.syncFailures === 1 ? "" : "s"} ·{" "}
+            {diagnostics.entriesSkipped} entry{diagnostics.entriesSkipped === 1 ? "" : "s"} skipped
           </p>
         )}
         <p style={{ fontSize: 12, opacity: 0.5, marginTop: 4 }}>
