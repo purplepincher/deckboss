@@ -148,8 +148,8 @@ version:
 
 Hardened MVP, headed into field validation. The core recording →
 transcript → sync loop worked from early on; most of the work since has
-gone into closing correctness and data-loss gaps that an unusually
-aggressive multi-method QA process kept finding — security review,
+gone into closing correctness and data-loss gaps that a multi-method QA
+process kept finding — security review,
 cross-browser testing, stress testing, and several independent rounds of
 code audit (see `ROADMAP.md` for the blow-by-blow). The next milestone
 isn't a feature. It's real fishermen: a 6-8 week field beta with 3-5
