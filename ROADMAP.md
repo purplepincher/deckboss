@@ -181,12 +181,24 @@ Per Fable's memo — these are process, not engineering, and they're gating:
       starts now, in parallel with everything else.
 
 **Week 2:**
-- Ask-Your-Log: a local keyword/date/species query layer over existing
+- ~~Ask-Your-Log: a local keyword/date/species query layer over existing
   entries, no LLM, no API key. `query-engine.ts` already does the
-  filtering — this is mostly UI. Also the best source of real signal for
-  whether Phase 2's Context Packets are worth building at all.
+  filtering — this is mostly UI.~~ **This is now done, this entry is
+  stale.** `ask-parser.ts`'s `parseAskQuery()` is wired into
+  `TimelineScreen.tsx` (species/gear/weather chips, date and location
+  parsing), confirmed local-only (no LLM/API imports anywhere in the
+  parser or `query-engine.ts`), and covered by 10 genuinely passing
+  tests in `tests/unit/timeline-screen.test.tsx` ("ask-to-timeline
+  wiring"). Left here, struck through rather than deleted, matching this
+  doc's own convention for the Whisper-retry-queue correction earlier —
+  it's still the best source of real signal for whether Phase 2's
+  Context Packets are worth building at all, now that it's actually
+  live for field testers to use.
 - Domain-pack vocabulary split, opportunistically, while touching the
-  extractor for Ask-Your-Log anyway.
+  extractor for Ask-Your-Log anyway. **Still genuinely open** — no
+  `domain-packs/` directory exists yet; `entity-extractor.ts` hasn't
+  been split. Unlike Ask-Your-Log above, this one really is still Week 2
+  work.
 
 **Weeks 3-4:**
 - Spot Memory: surface past entries automatically on GPS re-entry to a
