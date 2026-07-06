@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { clear, createStore } from "idb-keyval";
 import {
   putEntry,
@@ -576,8 +576,8 @@ describe("restore drill, adversarial: corrupted manifest.json", () => {
   });
 });
 
-describe("restore drill, adversarial: a manifest that's stale/incomplete relative to what's actually in storage", () => {
-  it("does NOT discover a file that's physically present but missing from the manifest — the push-time manifest-union fix does not apply on a pull", async () => {
+describe("restore drill, fix verification: a stale/incomplete manifest is no longer a single point of failure on a cold-start recovery", () => {
+  it("recovers a file that's physically present in storage but missing from the manifest — the zero-local fallback scan engages on a fresh device's first pull", async () => {
     clearAdapterCache();
     await wipeLocalDeviceState();
     await setConfig(LOCAL_ZIP_CONFIG);
@@ -587,10 +587,11 @@ describe("restore drill, adversarial: a manifest that's stale/incomplete relativ
 
     const adapter = (await buildAdapter(LOCAL_ZIP_CONFIG)) as LocalZipAdapter;
     // Write a second entry's file directly to the adapter's storage
-    // WITHOUT updating the manifest — simulates a stale/incomplete
-    // manifest relative to what's actually in the bucket (a real backend
-    // could hit this from a manifest write that failed after the entry
-    // upload succeeded, or a manual file drop into the shared folder).
+    // WITHOUT updating the manifest — simulates the exact real-backend
+    // race this fix is for: entry upload succeeded, manifest write
+    // failed. The orphan file is real, parseable data sitting in the
+    // archive, but manifest.entries doesn't list it (no writeManifest()
+    // call, no refreshManifest()).
     const orphan = newEntrySkeleton({ id: crypto.randomUUID(), timestamp: new Date().toISOString(), gps: null, audio: null, source: "voice" });
     orphan.transcript = { text: "Physically present but not in the manifest", confidence: 0.9, language: "en", engine: "webspeech" };
     const { serializeEntry } = await import("../../src/core/tensor-log/entry-serializer");
@@ -605,21 +606,64 @@ describe("restore drill, adversarial: a manifest that's stale/incomplete relativ
     const result = await syncNow();
 
     expect(await getEntry(listedEntry.id)).toBeDefined();
-    // The orphan is real, valid, parseable data sitting in the archive —
-    // and pullRemoteEntries() never finds it, because it only ever
-    // iterates manifest.entries and has no listFiles()-based fallback scan.
-    // refreshManifest()'s union-with-remote fix (found and fixed earlier
-    // this session) only helps a device that has local entries to push;
-    // device B has nothing local to push on its first sync, so that fix
-    // never engages here. This is a real, unmitigated gap in "the archive
-    // is the canonical archive" — reported, not fixed (a real fix needs a
-    // listFiles(STORAGE_ROOT) fallback scan, cross-adapter, which is a
-    // bigger design/perf question: every adapter's listFiles() promises
-    // "recursive" per the StorageAdapter contract, but that's untested for
-    // GoogleDriveAdapter/S3CompatibleAdapter here, and scanning the whole
-    // folder on every cold pull has real cost implications worth a
-    // deliberate decision, not a guess).
-    expect(await getEntry(orphan.id)).toBeUndefined();
-    void result;
+
+    // Previously (the bug this drill found): pullRemoteEntries() only
+    // iterated manifest.entries, so the orphan was permanently invisible
+    // to every device's pull until some device's push happened to
+    // reference it — and refreshManifest()'s union-with-remote fix
+    // didn't help, because device B has nothing local to push on its
+    // first sync. Now: pullRemoteEntries() snapshots local entry count
+    // at the top, sees zero (the cold-start signature), and runs a
+    // listFiles(STORAGE_ROOT) fallback scan after the manifest pass to
+    // pick up exactly this kind of orphan. The orphan is recovered
+    // alongside the manifest-listed entry on the very first cold pull.
+    expect(await getEntry(orphan.id)).toBeDefined();
+    const pulledOrphan = await getEntry(orphan.id);
+    expect(pulledOrphan!.transcript?.text).toBe("Physically present but not in the manifest");
+
+    // The orphan counts toward pulled — one manifest entry + one orphan
+    // scanned = two entries recovered on a fresh device's first sync.
+    expect(result.pulled).toBe(2);
+  });
+});
+
+describe("restore drill, fix cost-scope: a normal sync on a device that already has local entries does NOT trigger the fallback scan", () => {
+  it("does not call listFiles(STORAGE_ROOT) when the device already has local entries (the scan is scoped to zero-local cold-start only)", async () => {
+    clearAdapterCache();
+    await wipeLocalDeviceState();
+    await setConfig(LOCAL_ZIP_CONFIG);
+
+    // Device A: populate and sync some entries to a shared archive.
+    await captureEntry({ audioBlob: null, transcript: { text: "First entry", confidence: 0.9, language: "en", engine: "webspeech" } });
+    await captureEntry({ audioBlob: null, transcript: { text: "Second entry", confidence: 0.9, language: "en", engine: "webspeech" } });
+    await syncNow();
+
+    // A normal day-to-day sync on a device that already has local
+    // entries — NOT the cold-start recovery case the fallback scan is
+    // scoped to. To keep the spy observing only the second sync, attach
+    // it AFTER the first sync completes; device A's local state stays
+    // in place (no wipe), which is exactly what "a device with local
+    // entries" means in production on every reconnect after the first.
+    const adapter = (await buildAdapter(LOCAL_ZIP_CONFIG)) as LocalZipAdapter;
+    const listFilesSpy = vi.spyOn(adapter, "listFiles");
+
+    await syncNow();
+
+    // The fallback scan calls listFiles(STORAGE_ROOT) (== "DeckBoss").
+    // It must NOT have been invoked here — the device has local entries
+    // already, so refreshManifest()'s push-time union step covers the
+    // multi-device-discovery case for free, and paying for a full
+    // directory scan on every normal sync would be the exact "blind
+    // always-scan default" the ROADMAP explicitly warns against. The
+    // spy check is on the specific scan-triggering prefix, not on
+    // listFiles() overall — verifyRemoteBlob() legitimately calls
+    // listFiles() for audio paths during the upload path, and that
+    // unrelated call site must not be conflated with the scan.
+    const coldStartScanCalls = listFilesSpy.mock.calls.filter(([prefix]) => prefix === "DeckBoss");
+    expect(coldStartScanCalls).toHaveLength(0);
+
+    // Sanity: the sync itself still works and the entries survived.
+    const local = await allEntries();
+    expect(local.length).toBeGreaterThanOrEqual(2);
   });
 });
