@@ -378,6 +378,33 @@ describe("restore drill, adversarial: a manifest entry whose file is missing/cor
     expect(await getEntry(good2.id)).toBeDefined();
     expect(await getEntry(willGoMissing.id)).toBeUndefined();
   });
+
+  it("reports the skipped entry in the return value", async () => {
+    clearAdapterCache();
+    await wipeLocalDeviceState();
+    await setConfig(LOCAL_ZIP_CONFIG);
+
+    const good1 = await captureEntry({ audioBlob: null, transcript: { text: "First good entry", confidence: 0.9, language: "en", engine: "webspeech" } });
+    const willGoMissing = await captureEntry({ audioBlob: null, transcript: { text: "This file will vanish from storage", confidence: 0.9, language: "en", engine: "webspeech" } });
+    const good2 = await captureEntry({ audioBlob: null, transcript: { text: "Second good entry", confidence: 0.9, language: "en", engine: "webspeech" } });
+
+    await syncNow();
+
+    const adapter = (await buildAdapter(LOCAL_ZIP_CONFIG)) as LocalZipAdapter;
+    const missingPath = entryPath(willGoMissing.timestamp, willGoMissing.id);
+    await adapter.deleteFile(missingPath);
+
+    await wipeLocalDeviceState();
+    await setConfig(LOCAL_ZIP_CONFIG);
+
+    const result = await syncNow();
+    expect(result.pulled).toBe(2);
+    expect(result.skipped).toBe(1);
+    expect(result.skippedPaths).toContain(missingPath);
+    expect(await getEntry(good1.id)).toBeDefined();
+    expect(await getEntry(good2.id)).toBeDefined();
+    expect(await getEntry(willGoMissing.id)).toBeUndefined();
+  });
 });
 
 describe("restore drill, adversarial: audio that was never verified/uploaded before the device was lost", () => {

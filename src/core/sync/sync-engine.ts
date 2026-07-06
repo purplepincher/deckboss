@@ -240,9 +240,9 @@ export async function drainQueue(): Promise<{ processed: number; failed: number 
   return processQueue(adapter, handleJob);
 }
 
-export async function pullRemoteEntries(): Promise<number> {
+export async function pullRemoteEntries(): Promise<{ pulled: number; skipped: number; skippedPaths: string[] }> {
   const adapter = await getActiveAdapter();
-  if (!adapter) return 0;
+  if (!adapter) return { pulled: 0, skipped: 0, skippedPaths: [] };
 
   const manifest = await adapter.getManifest();
 
@@ -263,6 +263,8 @@ export async function pullRemoteEntries(): Promise<number> {
   const coldStartRecovery = (await allEntries()).length === 0;
 
   let pulled = 0;
+  let skipped = 0;
+  const skippedPaths: string[] = [];
   const manifestListedPaths = new Set(manifest.entries.map((f) => f.path));
 
   for (const file of manifest.entries) {
@@ -272,6 +274,8 @@ export async function pullRemoteEntries(): Promise<number> {
       const { parseEntry } = await lazyParser();
       remoteEntry = parseEntry(await adapter.readFile(file.path));
     } catch {
+      skipped++;
+      skippedPaths.push(file.path);
       continue; // corrupt or unreadable remote file — skip, don't fail the whole pull
     }
 
@@ -282,10 +286,13 @@ export async function pullRemoteEntries(): Promise<number> {
   }
 
   if (coldStartRecovery) {
-    pulled += await fallbackScanForOrphanEntries(adapter, manifestListedPaths);
+    const scanResult = await fallbackScanForOrphanEntries(adapter, manifestListedPaths);
+    pulled += scanResult.pulled;
+    skipped += scanResult.skipped;
+    skippedPaths.push(...scanResult.skippedPaths);
   }
 
-  return pulled;
+  return { pulled, skipped, skippedPaths };
 }
 
 /**
@@ -327,7 +334,7 @@ export async function pullRemoteEntries(): Promise<number> {
 async function fallbackScanForOrphanEntries(
   adapter: StorageAdapter,
   manifestListedPaths: Set<string>,
-): Promise<number> {
+): Promise<{ pulled: number; skipped: number; skippedPaths: string[] }> {
   let files: FileMetadata[];
   try {
     files = await adapter.listFiles(STORAGE_ROOT);
@@ -336,10 +343,12 @@ async function fallbackScanForOrphanEntries(
     // If a real backend's listFiles() is unavailable momentarily we
     // don't want to fail the whole sync — same skip-manifest-entry
     // philosophy, just at the scan level.
-    return 0;
+    return { pulled: 0, skipped: 0, skippedPaths: [] };
   }
 
   let pulled = 0;
+  let skipped = 0;
+  const skippedPaths: string[] = [];
   for (const file of files) {
     if (!file.path.endsWith(".md")) continue;
     if (manifestListedPaths.has(file.path)) continue;
@@ -349,6 +358,8 @@ async function fallbackScanForOrphanEntries(
       const { parseEntry } = await lazyParser();
       remoteEntry = parseEntry(await adapter.readFile(file.path));
     } catch {
+      skipped++;
+      skippedPaths.push(file.path);
       continue; // corrupt or unreadable orphan — same skip semantics as the manifest loop
     }
 
@@ -362,7 +373,7 @@ async function fallbackScanForOrphanEntries(
     await putEntry(remoteEntry);
     pulled++;
   }
-  return pulled;
+  return { pulled, skipped, skippedPaths };
 }
 
 export async function pushAllLocalEntries(): Promise<number> {
@@ -576,16 +587,16 @@ export async function rehydrateAudioForEntry(entryId: string): Promise<Blob | un
 // and confusing if a user taps retry while a background sync is already
 // in flight. A concurrent second call gets the first call's in-flight
 // result instead of starting its own.
-let inFlight: Promise<{ pushed: number; pulled: number }> | null = null;
+let inFlight: Promise<{ pushed: number; pulled: number; skipped: number; skippedPaths: string[] }> | null = null;
 
-export async function syncNow(): Promise<{ pushed: number; pulled: number }> {
+export async function syncNow(): Promise<{ pushed: number; pulled: number; skipped: number; skippedPaths: string[] }> {
   if (inFlight) return inFlight;
   inFlight = (async () => {
     const pushed = await pushAllLocalEntries();
-    const pulled = await pullRemoteEntries();
+    const pullResult = await pullRemoteEntries();
     const { requeued } = await reconcileAudio();
     if (requeued > 0) await drainQueue(); // process the newly re-queued jobs in this same cycle
-    return { pushed, pulled };
+    return { pushed, ...pullResult };
   })();
   try {
     return await inFlight;
