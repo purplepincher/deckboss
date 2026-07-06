@@ -401,6 +401,9 @@ describe("restore drill, adversarial: a manifest entry whose file is missing/cor
     expect(result.pulled).toBe(2);
     expect(result.skipped).toBe(1);
     expect(result.skippedPaths).toContain(missingPath);
+    expect(await getEntry(good1.id)).toBeDefined();
+    expect(await getEntry(good2.id)).toBeDefined();
+    expect(await getEntry(willGoMissing.id)).toBeUndefined();
   });
 });
 
