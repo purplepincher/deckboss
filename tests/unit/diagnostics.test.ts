@@ -1,3 +1,4 @@
+import { describe, it, expect, beforeEach } from "vitest";
 import "fake-indexeddb/auto";
 import { clear, createStore } from "idb-keyval";
 import { getDiagnostics, recordEntriesSkipped, recordSyncAttempt } from "../../src/core/diagnostics";

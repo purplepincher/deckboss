@@ -5,7 +5,8 @@ import { get, set, createStore, type UseStore } from "idb-keyval";
  * Local-only usage counters — never sent anywhere, never touch a
  * StorageAdapter, exist purely so a fisherman having a bad day can export
  * one file and a maintainer can tell "the app is failing" from "nothing's
- * wrong, don't need them to reconstruct a timeline from memory over the phone. This
+ * wrong, they just haven't used it much" without needing GitHub, without
+ * needing them to reconstruct a timeline from memory over the phone. This
  * is the field-beta support path: Settings → Export ZIP already exists;
  * this makes it carry the data that turns "it's broken" into something
  * actionable.
