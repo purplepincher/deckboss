@@ -4,6 +4,7 @@ import {
   PutObjectCommand,
   DeleteObjectCommand,
   ListObjectsV2Command,
+  type _Object,
 } from "@aws-sdk/client-s3";
 import type { StorageAdapter, FileMetadata, Manifest, StorageBackendId } from "../interface";
 import { MANIFEST_PATH } from "../interface";
@@ -83,10 +84,24 @@ export abstract class S3CompatibleAdapter implements StorageAdapter {
   }
 
   async listFiles(prefix: string): Promise<FileMetadata[]> {
-    const res = await this.client.send(
-      new ListObjectsV2Command({ Bucket: this.config.bucket, Prefix: prefix }),
-    );
-    return (res.Contents ?? []).map((obj) => ({
+    const objects: _Object[] = [];
+    let continuationToken: string | undefined;
+
+    do {
+      const res = await this.client.send(
+        new ListObjectsV2Command({
+          Bucket: this.config.bucket,
+          Prefix: prefix,
+          ContinuationToken: continuationToken,
+        }),
+      );
+      if (res.Contents) {
+        objects.push(...res.Contents);
+      }
+      continuationToken = res.NextContinuationToken;
+    } while (continuationToken);
+
+    return objects.map((obj) => ({
       path: obj.Key ?? "",
       size: obj.Size ?? 0,
       modifiedAt: (obj.LastModified ?? new Date()).toISOString(),
