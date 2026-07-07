@@ -6,10 +6,13 @@
 [![Open app](https://img.shields.io/badge/open%20app-%2Fdeckboss%2Fapp-blue)](https://purplepincher.github.io/deckboss/app/)
 
 A voice-first fishing logbook: tap to record, and timestamp, GPS, and
-transcript are captured automatically. Runs entirely in the browser,
-offline-capable, and syncs only to storage you own — Google Drive,
-Cloudflare R2, Oracle Object Storage, or a plain `.zip` export. No
-PurplePincher server ever holds your logs.
+transcript are captured automatically. It's a **Progressive Web App
+(PWA)** — a website you install on your phone's home screen like an app,
+that keeps working with no signal at all. Recordings queue on your
+device and sync later, whenever you're back in range. Runs entirely in
+the browser, and syncs only to storage you own — Google Drive, Cloudflare
+R2, Oracle Object Storage, or a plain `.zip` export. No PurplePincher
+server ever holds your logs.
 
 **DeckBoss is a personal log, not a substitute for official or regulatory
 catch reporting.** The additive-corrections design (see
@@ -39,8 +42,12 @@ GitHub Pages, Cloudflare Pages, or any static host works.
 `.github/workflows/deploy-pages.yml` deploys `dist/` to GitHub Pages on every
 push to `main`, building with `BASE_PATH=/deckboss/` since a project repo
 with no custom domain is served at `https://<org>.github.io/deckboss/`.
-Routing itself uses `HashRouter`, which never needs a `base` — only asset
-URLs do (see `vite.config.ts`). Once a custom domain is added, delete the
+Routing itself uses `HashRouter` (a routing approach that keeps the current
+screen in the URL after a `#`, e.g. `/#/timeline` — the browser never sends
+the part after `#` to the server, so a static host with no server-side
+routing config can serve every screen from the same one `index.html`).
+That's why `HashRouter` never needs a `base` path — only asset URLs do
+(see `vite.config.ts`). Once a custom domain is added, delete the
 `BASE_PATH` env line from the workflow (defaults back to `/`).
 
 ## Storage setup (BYOK)
@@ -120,16 +127,22 @@ a deferred one.
 See [ARCHITECTURE.md](./ARCHITECTURE.md) for the full module map. The short
 version:
 
-- **Corrections are additive, never destructive.** Editing or "deleting" an
-  entry appends a Correction event; the original capture is never
-  overwritten. The justification is sync safety, not compliance (see the
-  disclaimer above): because edits are additive, two devices editing the
-  same entry produce two Correction objects that always merge safely
-  instead of conflicting — this is what makes offline sync work without
-  a last-write-wins data-loss risk. Formally, it's a state-based CRDT —
-  a grow-only set of corrections merged by union, with a proven
-  convergence property for the derived view under a documented,
-  explicitly-stated clock-skew assumption. See
+- **Corrections are additive, never destructive.** Imagine two crew phones
+  both editing the same log entry while the boat has no signal — say, the
+  captain fixes a typo in the species name on one phone, and a deckhand
+  updates the catch count on the other. When both phones come back into
+  range, whose edit wins? Most apps solve this with "last write wins,"
+  which quietly throws away whichever edit synced second. DeckBoss doesn't:
+  editing or "deleting" an entry appends a Correction event, and the
+  original capture is never overwritten. The justification is sync safety,
+  not compliance (see the disclaimer above): because edits are additive,
+  two devices editing the same entry produce two Correction objects that
+  always merge safely instead of conflicting, so nobody's edit ever
+  silently disappears. This pattern has a formal name — a **state-based
+  CRDT** (Conflict-free Replicated Data Type): a grow-only set of
+  corrections merged by union, with a proven convergence property for the
+  derived view under a documented, explicitly-stated clock-skew
+  assumption. See
   [docs/RESEARCH_sync_resilience.md](./docs/RESEARCH_sync_resilience.md)
   §1 for the proof sketch, and the doc comment at the top of
   `src/core/types/log-entry.ts` for the practical reasoning.
