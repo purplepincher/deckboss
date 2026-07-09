@@ -5,12 +5,12 @@
 [![Landing page](https://img.shields.io/badge/landing-purplepincher.github.io%2Fdeckboss-blue)](https://purplepincher.github.io/deckboss/)
 [![Open app](https://img.shields.io/badge/open%20app-%2Fdeckboss%2Fapp-blue)](https://purplepincher.github.io/deckboss/app/)
 
-A voice-first fishing logbook: tap to record, and timestamp, GPS, and
+A fishing logbook that records audio notes: tap to record, and timestamp, GPS, and
 transcript are captured automatically. It's a **Progressive Web App
 (PWA)** — a website you install on your phone's home screen like an app,
-that keeps working with no signal at all. Recordings queue on your
-device and sync later, whenever you're back in range. Runs entirely in
-the browser, and syncs only to storage you own — Google Drive, Cloudflare
+that works offline (no internet connection required for recording or storage).
+Recordings queue on your device and sync later, whenever you're back in range.
+Runs entirely in the browser, and syncs only to storage you own — Google Drive, Cloudflare
 R2, Oracle Object Storage, or a plain `.zip` export. No PurplePincher
 server ever holds your logs.
 
@@ -131,18 +131,17 @@ version:
   both editing the same log entry while the boat has no signal — say, the
   captain fixes a typo in the species name on one phone, and a deckhand
   updates the catch count on the other. When both phones come back into
-  range, whose edit wins? Most apps solve this with "last write wins,"
-  which quietly throws away whichever edit synced second. DeckBoss doesn't:
-  editing or "deleting" an entry appends a Correction event, and the
-  original capture is never overwritten. The justification is sync safety,
-  not compliance (see the disclaimer above): because edits are additive,
-  two devices editing the same entry produce two Correction objects that
-  always merge safely instead of conflicting, so nobody's edit ever
-  silently disappears. This pattern has a formal name — a **state-based
-  CRDT** (Conflict-free Replicated Data Type): a grow-only set of
-  corrections merged by union, with a proven convergence property for the
-  derived view under a documented, explicitly-stated clock-skew
-  assumption. See
+  range, a standard approach is "last write wins," which silently discards
+  whichever edit synced second. DeckBoss avoids this: editing or "deleting"
+  an entry appends a Correction event, and the original capture is never
+  overwritten. The justification is sync safety, not compliance (see the
+  disclaimer above): because edits are additive, two devices editing the
+  same entry produce two Correction objects that always merge safely instead
+  of conflicting, so nobody's edit ever silently disappears. This pattern
+  has a formal name — a **state-based CRDT** (Conflict-free Replicated Data
+  Type): a grow-only set of corrections merged by union, with a proven
+  convergence property for the derived view under a documented,
+  explicitly-stated clock-skew assumption. See
   [docs/RESEARCH_sync_resilience.md](./docs/RESEARCH_sync_resilience.md)
   §1 for the proof sketch, and the doc comment at the top of
   `src/core/types/log-entry.ts` for the practical reasoning.
@@ -159,14 +158,14 @@ version:
 
 ## Status
 
-Hardened MVP, headed into field validation. The core recording →
-transcript → sync loop worked from early on; most of the work since has
-gone into closing correctness and data-loss gaps that a multi-method QA
-process kept finding — security review,
-cross-browser testing, stress testing, and several independent rounds of
-code audit (see `ROADMAP.md` for the blow-by-blow). The next milestone
-isn't a feature. It's real fishermen: a 6-8 week field beta with 3-5
-boats is the actual current focus, planned in detail in
+Pre-release (MVP) – currently being validated in real fishing conditions.
+The core recording → transcript → sync loop worked from early on; most of the
+work since has gone into closing correctness and data-loss gaps that a
+multi-method QA process kept finding — security review, cross-browser
+testing, stress testing, and several independent rounds of code audit (see
+`ROADMAP.md` for the documentation of each round). The next milestone isn't
+a feature. It's real fishermen: a 6-8 week field beta with 3-5 boats is the
+actual current focus, planned in detail in
 [docs/FABLE_PHASE2_PLAN.md](./docs/FABLE_PHASE2_PLAN.md).
 
 **Shipped and working:**
@@ -183,9 +182,9 @@ boats is the actual current focus, planned in detail in
   edited; retracted entries stay recoverable via a "Show retracted" toggle
 - Local-only IndexedDB persistence with an offline sync queue, uploads
   that are verified by reading them back rather than trusted on a
-  successful write, and an automatic reconciliation pass for anything
-  that still drifts out of sync
-- Storage adapters: Local ZIP export (works today, zero setup), Google
+  successful write, and an automatic reconciliation pass for anything that
+  still drifts out of sync
+- Storage adapters: Local ZIP export (works without configuration), Google
   Drive, Cloudflare R2, Oracle Object Storage (cloud backends need the
   user's own credentials — see setup above)
 - A stable per-device id, a storage-usage meter in Settings, local
@@ -200,10 +199,9 @@ boats is the actual current focus, planned in detail in
   measurements (degrees, feet, knots), and standalone quantities from the
   transcript text, so they become filterable query dimensions in
   Ask-Your-Log
-- The hold-to-cancel gesture during recording — formerly the one
-  destructive, wet-glove-unreliable action left in an otherwise
-  append-only app — is gone, replaced by a post-save Discard step (design
-  reasoning in
+- The hold-to-cancel gesture during recording — formerly the only
+  destructive gesture in an otherwise append-only app — is gone, replaced
+  by a post-save Discard step (design reasoning in
   [docs/FABLE_FRONTEND_DESIGN.md](./docs/FABLE_FRONTEND_DESIGN.md))
 
 **What's left before the field beta:** the restore-drill (fresh device,
