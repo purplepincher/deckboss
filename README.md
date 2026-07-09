@@ -173,7 +173,11 @@ boats is the actual current focus, planned in detail in
 
 - Voice recording with GPS + timestamp capture, fully offline-capable
 - Web Speech API transcription by default — no account needed before a
-  first recording works; OpenAI Whisper as an opt-in upgrade
+  first recording works; OpenAI Whisper as an opt-in upgrade, with an
+  **offline Whisper retry queue**: if Whisper is configured but the network
+  is unreachable at sea, the recording is saved locally and automatically
+  re-transcribed when connectivity returns (see `enqueueWhisperRetry` in
+  `sync-engine.ts`, exercised by `tests/unit/whisper-retry.test.ts`)
 - Markdown + YAML frontmatter storage, one human-readable file per entry
 - Additive corrections (amend/retract) — entries are never destructively
   edited; retracted entries stay recoverable via a "Show retracted" toggle
@@ -189,8 +193,13 @@ boats is the actual current focus, planned in detail in
 - Property-based tests proving the sync/merge core's convergence and
   no-silent-drop guarantees hold across randomized concurrent scenarios,
   not just the specific orderings someone thought to hand-write
-- Ask-Your-Log: a local keyword/date/species/gear/weather query layer
-  over the timeline, including voice search — no LLM, no API key
+- Ask-Your-Log: a local keyword/date/species/gear/weather/depth/location
+  query layer over the timeline, including voice search — no LLM, no API
+  key. Entity extraction is keyword + regex (no ML): it recognises species,
+  gear, weather terms, relative locations, depths (e.g. "eighty fathoms"),
+  measurements (degrees, feet, knots), and standalone quantities from the
+  transcript text, so they become filterable query dimensions in
+  Ask-Your-Log
 - The hold-to-cancel gesture during recording — formerly the one
   destructive, wet-glove-unreliable action left in an otherwise
   append-only app — is gone, replaced by a post-save Discard step (design
